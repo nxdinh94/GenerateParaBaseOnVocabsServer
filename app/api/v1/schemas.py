@@ -93,12 +93,10 @@ class UserInfo(BaseModel):
     verified_email: Optional[bool] = None
 
 class GoogleLoginResponse(BaseModel):
-    status: bool
-    message: str
-    user_info: Optional[UserInfo] = None
     access_token: Optional[str] = None
     jwt_token: Optional[str] = None
-    expires_in: Optional[int] = None
+    refresh_token: Optional[str] = None
+    jwt_refresh_token: Optional[str] = None
 
 class TokenVerifyRequest(BaseModel):
     token: str
@@ -116,3 +114,13 @@ class RefreshTokenResponse(BaseModel):
     message: str
     access_token: Optional[str] = None
     expires_in: Optional[int] = None
+
+# === JWT Token Renewal ===
+class RenewJWTRequest(BaseModel):
+    jwt_refresh_token: str
+
+class RenewJWTResponse(BaseModel):
+    status: bool
+    message: str
+    jwt_token: str
+    user_data: Optional[dict] = None

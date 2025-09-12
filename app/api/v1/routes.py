@@ -3,6 +3,8 @@ from app.api.v1 import schemas
 from app.api.v1.database_routes import router as db_router
 from app.services.gemini_client import GeminiClient
 from app.services.google_auth import google_auth_service
+from app.database.crud import get_user_crud, get_refresh_token_crud
+from app.database.models import GoogleUserCreate, RefreshTokenCreate
 from app.utils.logging_conf import get_logger
 from typing import Optional
 
@@ -79,27 +81,59 @@ async def google_login(req: schemas.GoogleLoginRequest):
         
         user_info = auth_result["user_info"]
         
-        # Create JWT token for our application
-        jwt_token = google_auth_service.create_jwt_token(user_info)
+        # Save or update user in database
+        user_crud = get_user_crud()
+        refresh_token_crud = get_refresh_token_crud()
         
-        # Create response with user info
-        user_response = schemas.UserInfo(
-            id=user_info.get("id"),
-            email=user_info.get("email"),
-            name=user_info.get("name"),
-            picture=user_info.get("picture"),
-            verified_email=user_info.get("verified_email")
+        # Check if user already exists
+        existing_user = await user_crud.get_user_by_google_id(user_info.get("id"))
+        
+        if existing_user:
+            # Update existing user with latest info
+            updated_user = await user_crud.update_google_user(user_info.get("id"), user_info)
+            user_db = updated_user
+            logger.info(f"🔄 Updated existing Google user: {user_info.get('email')}")
+        else:
+            # Create new user
+            google_user_data = GoogleUserCreate(
+                google_id=user_info.get("id"),
+                name=user_info.get("name"),
+                email=user_info.get("email"),
+                picture=user_info.get("picture"),
+                verified_email=user_info.get("verified_email")
+            )
+            user_db = await user_crud.create_google_user(google_user_data)
+            logger.info(f"✅ Created new Google user: {user_info.get('email')}")
+        
+        # Create JWT token for our application (using database user ID)
+        jwt_user_data = {
+            "id": user_db.google_id,  # Use Google ID for compatibility
+            "user_id": str(user_db.id),  # Add database user ID
+            "email": user_db.email,
+            "name": user_db.name,
+            "picture": user_db.picture,
+            "verified_email": user_db.verified_email
+        }
+        jwt_token = google_auth_service.create_jwt_token(jwt_user_data)
+        
+        # Create JWT refresh token for renewing JWT tokens
+        jwt_refresh_token = google_auth_service.create_jwt_refresh_token(jwt_user_data)
+        
+        # Save JWT refresh token to database
+        refresh_token_data = RefreshTokenCreate(
+            user_id=str(user_db.id),
+            refresh_token=jwt_refresh_token
         )
+        await refresh_token_crud.create_refresh_token(refresh_token_data)
+        logger.info(f"💾 Saved JWT refresh token for user: {user_db.email}")
         
         logger.info(f"✅ User {user_info.get('email')} logged in successfully")
         
         return schemas.GoogleLoginResponse(
-            status=True,
-            message="Login successful",
-            user_info=user_response,
             access_token=auth_result.get("access_token"),
             jwt_token=jwt_token,
-            expires_in=auth_result.get("expires_in")
+            refresh_token=auth_result.get("refresh_token"),
+            jwt_refresh_token=jwt_refresh_token
         )
         
     except HTTPException:
@@ -246,6 +280,67 @@ async def refresh_token(req: schemas.RefreshTokenRequest):
                 "message": "Failed to refresh token",
                 "details": str(e)
             })
+
+@router.post("/auth/renew-jwt", response_model=schemas.RenewJWTResponse)
+async def renew_jwt_token(req: schemas.RenewJWTRequest):
+    """
+    Renew JWT token using JWT refresh token
+    """
+    try:
+        if not req.jwt_refresh_token or req.jwt_refresh_token.strip() == "":
+            raise HTTPException(status_code=400, detail={
+                "error": "missing_jwt_refresh_token",
+                "message": "JWT refresh token is required"
+            })
+        
+        refresh_token_crud = get_refresh_token_crud()
+        
+        # Verify JWT refresh token exists in database
+        stored_refresh_token = await refresh_token_crud.get_refresh_token_by_token(req.jwt_refresh_token)
+        
+        if not stored_refresh_token:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_jwt_refresh_token",
+                "message": "JWT refresh token not found in database"
+            })
+            
+        # Verify JWT refresh token signature and expiration
+        user_data = google_auth_service.verify_jwt_refresh_token(req.jwt_refresh_token)
+        
+        if not user_data:
+            # Remove invalid token from database
+            await refresh_token_crud.delete_refresh_token(req.jwt_refresh_token)
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_jwt_refresh_token",
+                "message": "JWT refresh token is invalid or expired"
+            })
+        
+        # Create new JWT token with same user data
+        new_jwt_token = google_auth_service.create_jwt_token(user_data)
+        
+        logger.info(f"✅ JWT token renewed for user: {user_data.get('email')}")
+        
+        return schemas.RenewJWTResponse(
+            status=True,
+            message="JWT token renewed successfully",
+            jwt_token=new_jwt_token,
+            user_data={
+                "user_id": user_data.get("user_id"),
+                "email": user_data.get("email"),
+                "name": user_data.get("name"),
+                "picture": user_data.get("picture")
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error renewing JWT token")
+        raise HTTPException(status_code=500, detail={
+            "error": "jwt_renewal_failed",
+            "message": "Failed to renew JWT token",
+            "details": str(e)
+        })
 
 @router.get("/auth/profile")
 async def get_user_profile(authorization: Optional[str] = Header(None)):

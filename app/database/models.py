@@ -25,6 +25,13 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
 
+class GoogleUserCreate(BaseModel):
+    google_id: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+    picture: Optional[str] = None
+    verified_email: Optional[bool] = None
+
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
@@ -33,7 +40,11 @@ class UserInDB(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
     name: str
     email: str
-    password: str  # hashed password
+    password: Optional[str] = None  # For regular users
+    google_id: Optional[str] = None  # For Google users
+    picture: Optional[str] = None
+    verified_email: Optional[bool] = None
+    auth_type: str = Field(default="local")  # "local" or "google"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     @field_validator('id', mode='before')
@@ -57,6 +68,10 @@ class UserResponse(BaseModel):
     id: PyObjectId = Field(alias="_id")
     name: str
     email: str
+    google_id: Optional[str] = None
+    picture: Optional[str] = None
+    verified_email: Optional[bool] = None
+    auth_type: str = "local"
     created_at: datetime
     
     @field_validator('id', mode='before')

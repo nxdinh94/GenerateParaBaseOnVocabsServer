@@ -133,10 +133,25 @@ class GoogleAuthService:
             "email": user_data.get("email"),
             "name": user_data.get("name"),
             "picture": user_data.get("picture"),
-            "exp": datetime.utcnow() + timedelta(days=7)  # Token expires in 7 days
+            "exp": datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
         }
         
         return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
+
+    def create_jwt_refresh_token(self, user_data: Dict[str, Any]) -> str:
+        """
+        Create JWT refresh token for renewing JWT tokens
+        """
+        payload = {
+            "user_id": user_data.get("id"),
+            "email": user_data.get("email"),
+            "name": user_data.get("name"),
+            "picture": user_data.get("picture"),
+            "type": "refresh",
+            "exp": datetime.utcnow() + timedelta(days=30)  # Refresh token expires in 30 days
+        }
+        
+        return jwt.encode(payload, self.jwt_secret + "_refresh", algorithm="HS256")
 
     def verify_jwt_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
@@ -150,6 +165,23 @@ class GoogleAuthService:
             return None
         except jwt.InvalidTokenError:
             logger.error("Invalid JWT token")
+            return None
+
+    def verify_jwt_refresh_token(self, refresh_token: str) -> Optional[Dict[str, Any]]:
+        """
+        Verify JWT refresh token and return user data
+        """
+        try:
+            payload = jwt.decode(refresh_token, self.jwt_secret + "_refresh", algorithms=["HS256"])
+            if payload.get("type") != "refresh":
+                logger.error("Token is not a refresh token")
+                return None
+            return payload
+        except jwt.ExpiredSignatureError:
+            logger.error("JWT refresh token has expired")
+            return None
+        except jwt.InvalidTokenError:
+            logger.error("Invalid JWT refresh token")
             return None
 
     async def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:

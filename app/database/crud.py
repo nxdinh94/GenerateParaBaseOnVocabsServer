@@ -2,13 +2,17 @@
 Database operations for MongoDB collections
 """
 from typing import List, Optional
+from datetime import datetime, timedelta
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 import bcrypt
+import secrets
+import string
 
 from app.database.connection import get_collection
 from app.database.models import (
-    UserCreate, UserInDB, UserUpdate, UserResponse,
+    UserCreate, GoogleUserCreate, UserInDB, UserUpdate, UserResponse,
+    RefreshTokenCreate, RefreshTokenInDB, RefreshTokenResponse,
     InputHistoryCreate, InputHistoryInDB, InputHistoryResponse,
     SavedParagraphCreate, SavedParagraphInDB, SavedParagraphResponse
 )
@@ -29,6 +33,11 @@ class UserCRUD:
         """Verify password against hash"""
         return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
     
+    def generate_random_password(self, length: int = 16) -> str:
+        """Generate a random password for OAuth users"""
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        return ''.join(secrets.choice(alphabet) for _ in range(length))
+
     async def create_user(self, user_data: UserCreate) -> UserInDB:
         """Create new user"""
         # Hash password
@@ -37,6 +46,8 @@ class UserCRUD:
         # Create user document
         user_dict = user_data.dict()
         user_dict['password'] = hashed_password
+        user_dict['auth_type'] = 'local'
+        user_dict['created_at'] = datetime.utcnow()  # Ensure created_at is set
         
         # Insert to database
         result = await self.collection.insert_one(user_dict)
@@ -44,6 +55,50 @@ class UserCRUD:
         # Return created user
         created_user = await self.collection.find_one({"_id": result.inserted_id})
         return UserInDB(**created_user)
+    
+    async def create_google_user(self, user_data: GoogleUserCreate) -> UserInDB:
+        """Create new Google user"""
+        # Generate random password for OAuth users (required by schema)
+        random_password = self.generate_random_password()
+        hashed_password = self.hash_password(random_password)
+        
+        # Create user document
+        user_dict = user_data.dict()
+        user_dict['auth_type'] = 'google'
+        user_dict['password'] = hashed_password  # Add required password field
+        user_dict['created_at'] = datetime.utcnow()  # Add required created_at field
+        
+        # Insert to database
+        result = await self.collection.insert_one(user_dict)
+        
+        # Return created user
+        created_user = await self.collection.find_one({"_id": result.inserted_id})
+        return UserInDB(**created_user)
+    
+    async def get_user_by_google_id(self, google_id: str) -> Optional[UserInDB]:
+        """Get user by Google ID"""
+        user = await self.collection.find_one({"google_id": google_id, "auth_type": "google"})
+        return UserInDB(**user) if user else None
+    
+    async def update_google_user(self, google_id: str, user_data: dict) -> Optional[UserInDB]:
+        """Update Google user data"""
+        update_dict = {
+            "name": user_data.get("name"),
+            "email": user_data.get("email"),
+            "picture": user_data.get("picture"),
+            "verified_email": user_data.get("verified_email")
+        }
+        
+        # Remove None values
+        update_dict = {k: v for k, v in update_dict.items() if v is not None}
+        
+        if update_dict:
+            await self.collection.update_one(
+                {"google_id": google_id, "auth_type": "google"}, 
+                {"$set": update_dict}
+            )
+        
+        return await self.get_user_by_google_id(google_id)
     
     async def get_user_by_id(self, user_id: str) -> Optional[UserInDB]:
         """Get user by ID"""
@@ -71,6 +126,56 @@ class UserCRUD:
         """Delete user"""
         result = await self.collection.delete_one({"_id": ObjectId(user_id)})
         return result.deleted_count > 0
+
+class RefreshTokenCRUD:
+    """CRUD operations for RefreshTokens collection"""
+    
+    @property
+    def collection(self) -> AsyncIOMotorCollection:
+        return get_collection("refresh_tokens")
+    
+    async def create_refresh_token(self, token_data: RefreshTokenCreate) -> RefreshTokenInDB:
+        """Create new refresh token"""
+        token_dict = token_data.dict()
+        # Convert user_id string to ObjectId for storage
+        token_dict['user_id'] = ObjectId(token_dict['user_id'])
+        token_dict['created_at'] = datetime.utcnow()  # Add required created_at field
+        
+        # Insert to database
+        result = await self.collection.insert_one(token_dict)
+        
+        # Return created token
+        created_token = await self.collection.find_one({"_id": result.inserted_id})
+        return RefreshTokenInDB(**created_token)
+    
+    async def get_refresh_token_by_token(self, refresh_token: str) -> Optional[RefreshTokenInDB]:
+        """Get refresh token by token string"""
+        token = await self.collection.find_one({"refresh_token": refresh_token})
+        return RefreshTokenInDB(**token) if token else None
+    
+    async def get_user_refresh_tokens(self, user_id: str) -> List[RefreshTokenInDB]:
+        """Get all refresh tokens for a user"""
+        cursor = self.collection.find({"user_id": ObjectId(user_id)}).sort("created_at", -1)
+        tokens = []
+        async for token in cursor:
+            tokens.append(RefreshTokenInDB(**token))
+        return tokens
+    
+    async def delete_refresh_token(self, refresh_token: str) -> bool:
+        """Delete a refresh token"""
+        result = await self.collection.delete_one({"refresh_token": refresh_token})
+        return result.deleted_count > 0
+    
+    async def delete_user_refresh_tokens(self, user_id: str) -> int:
+        """Delete all refresh tokens for a user"""
+        result = await self.collection.delete_many({"user_id": ObjectId(user_id)})
+        return result.deleted_count
+    
+    async def cleanup_expired_tokens(self, expiry_days: int = 30) -> int:
+        """Clean up tokens older than specified days"""
+        cutoff_date = datetime.utcnow() - timedelta(days=expiry_days)
+        result = await self.collection.delete_many({"created_at": {"$lt": cutoff_date}})
+        return result.deleted_count
 
 class InputHistoryCRUD:
     """CRUD operations for Input History collection"""
@@ -201,6 +306,9 @@ class SavedParagraphCRUD:
 # Create CRUD instances (lazy initialization)
 def get_user_crud():
     return UserCRUD()
+
+def get_refresh_token_crud():
+    return RefreshTokenCRUD()
 
 def get_input_history_crud():
     return InputHistoryCRUD()

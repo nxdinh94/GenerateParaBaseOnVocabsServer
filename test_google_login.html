@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .section h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        .auth-url {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            word-break: break-all;
+            font-family: monospace;
+            border-left: 4px solid #007bff;
+        }
+        .test-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .test-form input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .test-form button {
+            background: #28a745;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .test-form button:hover {
+            background: #218838;
+        }
+        .response {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #28a745;
+            margin-top: 15px;
+            display: none;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .step {
+            background: #e7f3ff;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #0066cc;
+        }
+        .step-number {
+            font-weight: bold;
+            color: #0066cc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Google Login API Test</h1>
+        <p>This page helps you test the Google OAuth integration and the complete login flow.</p>
+        
+        <div class="section">
+            <h3>📋 Step 1: Get Authorization Code</h3>
+            <div class="step">
+                <span class="step-number">1.</span> Click the link below to authorize with Google:
+            </div>
+            <div class="auth-url">
+                <a href="https://accounts.google.com/o/oauth2/auth?client_id=756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A5173%2Fapp&scope=openid+email+profile&response_type=code&access_type=offline&prompt=consent&state=test_state_12345" target="_blank">
+                    🔗 Authorize with Google
+                </a>
+            </div>
+            <div class="step">
+                <span class="step-number">2.</span> After authorization, you'll be redirected to: <code>http://localhost:5173/app?code=YOUR_AUTH_CODE&state=test_state_12345</code>
+            </div>
+            <div class="step">
+                <span class="step-number">3.</span> Copy the <code>code</code> parameter from the URL and paste it below.
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🧪 Step 2: Test Login API</h3>
+            <div class="test-form">
+                <label for="authCode">Authorization Code:</label>
+                <input type="text" id="authCode" placeholder="Paste the authorization code here..." />
+                
+                <label for="redirectUri">Redirect URI:</label>
+                <input type="text" id="redirectUri" value="http://localhost:5173/app" />
+                
+                <button onclick="testLogin()">🚀 Test Login</button>
+                
+                <div id="response" class="response">
+                    <h4>Response:</h4>
+                    <pre id="responseData"></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📊 Expected Response</h3>
+            <p>A successful login should return all 4 tokens:</p>
+            <pre style="background: #f8f9fa; padding: 15px; border-radius: 5px;">{
+  "access_token": "ya29.a0ARm...",
+  "refresh_token": "1//0G...",
+  "jwt_token": "eyJhbGciOiJIUzI1...",
+  "jwt_refresh_token": "eyJhbGciOiJIUzI1...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "user": {
+    "id": "user_id",
+    "email": "user@gmail.com",
+    "name": "User Name"
+  }
+}</pre>
+        </div>
+    </div>
+
+    <script>
+        async function testLogin() {
+            const authCode = document.getElementById('authCode').value;
+            const redirectUri = document.getElementById('redirectUri').value;
+            const responseDiv = document.getElementById('response');
+            const responseData = document.getElementById('responseData');
+            
+            if (!authCode.trim()) {
+                alert('Please enter an authorization code');
+                return;
+            }
+            
+            responseDiv.style.display = 'block';
+            responseDiv.className = 'response';
+            responseData.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/v1/google/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        code: authCode,
+                        redirect_uri: redirectUri
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    responseData.textContent = JSON.stringify(data, null, 2);
+                    responseDiv.className = 'response';
+                } else {
+                    responseData.textContent = `Error ${response.status}:\n${JSON.stringify(data, null, 2)}`;
+                    responseDiv.className = 'response error';
+                }
+                
+            } catch (error) {
+                responseData.textContent = `Network Error: ${error.message}`;
+                responseDiv.className = 'response error';
+            }
+        }
+    </script>
+</body>
+</html>
