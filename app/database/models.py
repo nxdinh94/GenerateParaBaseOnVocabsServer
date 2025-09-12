@@ -2,26 +2,22 @@
 Pydantic models for MongoDB collections
 """
 from datetime import datetime
-from typing import List, Optional, Any
-from pydantic import BaseModel, Field, EmailStr, field_serializer, field_validator
+from typing import List, Optional, Any, Annotated
+from pydantic import BaseModel, Field, EmailStr, field_serializer, field_validator, BeforeValidator
 from bson import ObjectId
 
-class PyObjectId(str):
-    """Custom ObjectId type for Pydantic v2"""
-    
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-    
-    @classmethod
-    def validate(cls, v, handler=None):
-        if isinstance(v, ObjectId):
-            return str(v)
-        if isinstance(v, str):
-            if ObjectId.is_valid(v):
-                return v
-            raise ValueError("Invalid ObjectId string")
-        raise ValueError("ObjectId must be a valid ObjectId or string")
+def validate_object_id(v: Any) -> str:
+    """Validate and convert ObjectId to string"""
+    if isinstance(v, ObjectId):
+        return str(v)
+    if isinstance(v, str):
+        if ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid ObjectId string")
+    raise ValueError("ObjectId must be a valid ObjectId or string")
+
+# Create a type annotation for ObjectId fields
+PyObjectId = Annotated[str, BeforeValidator(validate_object_id)]
 
 # User Models
 class UserCreate(BaseModel):
