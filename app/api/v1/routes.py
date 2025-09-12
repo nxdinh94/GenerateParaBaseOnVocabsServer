@@ -107,8 +107,9 @@ async def google_login(req: schemas.GoogleLoginRequest):
         
         # Create JWT token for our application (using database user ID)
         jwt_user_data = {
-            "id": user_db.google_id,  # Use Google ID for compatibility
-            "user_id": str(user_db.id),  # Add database user ID
+            "id": str(user_db.id),  # Use database user ID (_id) as primary identifier
+            "user_id": str(user_db.id),  # Keep for backward compatibility
+            "google_id": user_db.google_id,  # Store Google ID for reference
             "email": user_db.email,
             "name": user_db.name,
             "picture": user_db.picture,
@@ -532,7 +533,7 @@ async def save_paragraph(req: schemas.SaveParagraphRequest, current_user: dict =
         else:
             # Create new input history
             history_data = InputHistoryCreate(
-                user_id=default_user_id,
+                user_id=user_id,
                 words=input_vocabs  # Save normalized vocabs
             )
             
@@ -569,7 +570,7 @@ async def save_paragraph(req: schemas.SaveParagraphRequest, current_user: dict =
 # === Get all saved paragraphs with vocabularies ===
 @router.get("/all-paragraphs")
 @router.get("/saved-paragraphs")  # Alias endpoint
-async def get_all_paragraphs(limit: int = 100, grouped: bool = True):
+async def get_all_paragraphs(limit: int = 100, grouped: bool = True, current_user: dict = Depends(get_current_user)):
     """
     Get all saved paragraphs with their vocabularies
     Available at both /all-paragraphs and /saved-paragraphs
@@ -582,10 +583,15 @@ async def get_all_paragraphs(limit: int = 100, grouped: bool = True):
         from app.database.crud import get_saved_paragraph_crud
         
         saved_paragraph_crud = get_saved_paragraph_crud()
-        default_user_id = "68c13d6181373f816d763a41"  # Default user ID
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
         
         # Get user's saved paragraphs with input history info
-        paragraphs_data = await saved_paragraph_crud.get_user_saved_paragraphs(default_user_id, limit)
+        paragraphs_data = await saved_paragraph_crud.get_user_saved_paragraphs(user_id, limit)
         
         if grouped:
             # Group paragraphs by input_history_id
@@ -665,15 +671,34 @@ async def get_all_paragraphs(limit: int = 100, grouped: bool = True):
 
 # === Get paragraphs by input_history_id (group details) ===
 @router.get("/paragraphs-by-group/{input_history_id}")
-async def get_paragraphs_by_group(input_history_id: str):
+async def get_paragraphs_by_group(input_history_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get all paragraphs for a specific input_history_id (vocabulary group)
     """
     try:
-        from app.database.crud import get_saved_paragraph_crud
+        from app.database.crud import get_saved_paragraph_crud, get_input_history_crud
         from bson import ObjectId
         
         saved_paragraph_crud = get_saved_paragraph_crud()
+        input_history_crud = get_input_history_crud()
+        
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
+        
+        # Verify that the input_history belongs to the current user
+        input_history = await input_history_crud.get_input_history_by_id(input_history_id)
+        if not input_history or str(input_history.user_id) != user_id:
+            return {
+                "status": False,
+                "input_history_id": input_history_id,
+                "total_paragraphs": 0,
+                "paragraphs": [],
+                "message": "Input history not found or access denied"
+            }
         
         # Get paragraphs by input_history_id
         paragraphs = await saved_paragraph_crud.get_paragraphs_by_input_history(input_history_id)
@@ -707,7 +732,7 @@ async def get_paragraphs_by_group(input_history_id: str):
 
 # === Get all unique vocabularies ===
 @router.get("/unique-vocabs", response_model=schemas.UniqueVocabsResponse)
-async def get_unique_vocabs():
+async def get_unique_vocabs(current_user: dict = Depends(get_current_user)):
     """
     Get all unique vocabularies from saved paragraphs
     """
@@ -715,10 +740,15 @@ async def get_unique_vocabs():
         from app.database.crud import get_input_history_crud
         
         input_history_crud = get_input_history_crud()
-        default_user_id = "68c13d6181373f816d763a41"  # Default user ID
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
         
         # Get all input histories for the user
-        input_histories = await input_history_crud.get_user_input_history(default_user_id, limit=1000)
+        input_histories = await input_history_crud.get_user_input_history(user_id, limit=1000)
         
         # Collect all unique vocabularies
         all_vocabs = set()

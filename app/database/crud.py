@@ -190,6 +190,7 @@ class InputHistoryCRUD:
         history_dict = history_data.dict()
         # Convert user_id string to ObjectId for storage
         history_dict['user_id'] = ObjectId(history_dict['user_id'])
+        history_dict['created_at'] = datetime.utcnow()  # Add required created_at field
         
         # Insert to database
         result = await self.collection.insert_one(history_dict)
@@ -246,6 +247,7 @@ class SavedParagraphCRUD:
         paragraph_dict = paragraph_data.dict()
         # Convert input_history_id string to ObjectId for storage
         paragraph_dict['input_history_id'] = ObjectId(paragraph_dict['input_history_id'])
+        paragraph_dict['created_at'] = datetime.utcnow()  # Add required created_at field
         
         # Insert to database
         result = await self.collection.insert_one(paragraph_dict)
