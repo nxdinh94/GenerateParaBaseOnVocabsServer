@@ -24,6 +24,7 @@ class UserCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
     password: str = Field(..., min_length=6)
+    avt: Optional[str] = None
 
 class GoogleUserCreate(BaseModel):
     google_id: str = Field(..., min_length=1)
@@ -31,10 +32,12 @@ class GoogleUserCreate(BaseModel):
     email: EmailStr
     picture: Optional[str] = None
     verified_email: Optional[bool] = None
+    avt: Optional[str] = None
 
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
+    avt: Optional[str] = None
 
 class UserInDB(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
@@ -44,6 +47,7 @@ class UserInDB(BaseModel):
     google_id: Optional[str] = None  # For Google users
     picture: Optional[str] = None
     verified_email: Optional[bool] = None
+    avt: Optional[str] = None  # Avatar field
     auth_type: str = Field(default="local")  # "local" or "google"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
@@ -71,6 +75,7 @@ class UserResponse(BaseModel):
     google_id: Optional[str] = None
     picture: Optional[str] = None
     verified_email: Optional[bool] = None
+    avt: Optional[str] = None  # Avatar field
     auth_type: str = "local"
     created_at: datetime
     

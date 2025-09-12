@@ -86,7 +86,8 @@ class UserCRUD:
             "name": user_data.get("name"),
             "email": user_data.get("email"),
             "picture": user_data.get("picture"),
-            "verified_email": user_data.get("verified_email")
+            "verified_email": user_data.get("verified_email"),
+            "avt": user_data.get("avt")
         }
         
         # Remove None values

@@ -55,6 +55,10 @@ class SchemaMigration:
                                 "minLength": 6,
                                 "description": "Hashed password"
                             },
+                            "avt": {
+                                "bsonType": ["string", "null"],
+                                "description": "User's avatar URL (nullable)"
+                            },
                             "created_at": {
                                 "bsonType": "date",
                                 "description": "Account creation timestamp"
