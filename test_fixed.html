@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Auth Test - Fixed</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; }
+        button { padding: 12px 24px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Google Auth Test - Fixed Version</h1>
+    
+    <div class="status info">
+        <strong>Fixes applied:</strong>
+        <ul>
+            <li>✅ Removed redirect_uri from popup mode</li>
+            <li>✅ Added better error logging</li>
+            <li>✅ Simplified OAuth flow</li>
+        </ul>
+    </div>
+    
+    <div id="status" class="status">Ready to test...</div>
+    <button id="signin">🔐 Sign In with Google</button>
+    
+    <h3>📋 Results:</h3>
+    <div id="result"></div>
+    
+    <h3>🔍 Debug Logs:</h3>
+    <pre id="logs"></pre>
+
+    <script>
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('logs');
+            logElement.textContent = `[${timestamp}] ${message}\n` + logElement.textContent;
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function initGoogleAuth() {
+            log('🔄 Initializing Google OAuth...');
+            
+            // Popup mode - NO redirect_uri needed
+            const client = google.accounts.oauth2.initCodeClient({
+                client_id: '756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com',
+                scope: 'openid email profile',
+                ux_mode: 'popup',
+                callback: handleAuthCode,
+            });
+
+            document.getElementById('signin').onclick = () => {
+                log('🚀 Starting Google OAuth flow...');
+                updateStatus('Opening Google popup...', 'info');
+                client.requestCode();
+            };
+            
+            log('✅ Google OAuth initialized successfully');
+        }
+
+        async function handleAuthCode(response) {
+            log('📨 Received response from Google: ' + JSON.stringify(response));
+            
+            if (response.code) {
+                log('✅ Authorization code received: ' + response.code.substring(0, 20) + '...');
+                updateStatus('Got authorization code, sending to backend...', 'info');
+                
+                try {
+                    log('🔄 Sending request to FastAPI backend...');
+                    
+                    const apiResponse = await fetch('http://localhost:8000/api/v1/auth/google/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            authorization_code: response.code
+                        })
+                    });
+
+                    const result = await apiResponse.json();
+                    
+                    log('📨 Backend response: ' + JSON.stringify(result, null, 2));
+                    
+                    if (result.status) {
+                        updateStatus('🎉 Login successful!', 'success');
+                        log('✅ Login successful!');
+                        
+                        // Store tokens
+                        if (result.jwt_token) {
+                            localStorage.setItem('jwt_token', result.jwt_token);
+                            log('💾 JWT token saved to localStorage');
+                        }
+                        
+                    } else {
+                        updateStatus('❌ Login failed: ' + result.message, 'error');
+                        log('❌ Login failed: ' + result.message);
+                    }
+                    
+                    document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+                    
+                } catch (error) {
+                    const errorMsg = 'Network error: ' + error.message;
+                    updateStatus('❌ ' + errorMsg, 'error');
+                    log('💥 ' + errorMsg);
+                    document.getElementById('result').textContent = errorMsg;
+                }
+            } else {
+                const errorMsg = 'No authorization code received from Google';
+                updateStatus('❌ ' + errorMsg, 'error');
+                log('❌ ' + errorMsg);
+                document.getElementById('result').textContent = 'OAuth flow failed - no code received';
+            }
+        }
+
+        // Initialize when page loads
+        window.onload = function() {
+            log('🚀 Page loaded, waiting for Google scripts...');
+            
+            if (typeof google !== 'undefined') {
+                initGoogleAuth();
+            } else {
+                // Wait for Google script to load
+                let attempts = 0;
+                const checkGoogle = setInterval(() => {
+                    attempts++;
+                    if (typeof google !== 'undefined') {
+                        clearInterval(checkGoogle);
+                        initGoogleAuth();
+                    } else if (attempts > 10) {
+                        clearInterval(checkGoogle);
+                        updateStatus('❌ Google scripts failed to load', 'error');
+                        log('❌ Google scripts failed to load after 10 attempts');
+                    }
+                }, 500);
+            }
+        };
+    </script>
+</body>
+</html>

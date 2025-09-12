@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Auth Alternative Method</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button { padding: 12px 24px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Google Auth - Alternative Method</h1>
+    
+    <div class="status info">
+        <strong>Alternative approach:</strong>
+        <ul>
+            <li>🔄 Try redirect mode instead of popup</li>
+            <li>📝 Manual authorization code input</li>
+            <li>🛠️ Different OAuth configuration</li>
+        </ul>
+    </div>
+    
+    <div>
+        <button onclick="manualAuth()">🔗 Manual Authorization (Redirect)</button>
+        <button onclick="testWithCode()">🧪 Test with Manual Code</button>
+    </div>
+    
+    <div id="status" class="status">Ready...</div>
+    
+    <div id="manual-input" style="display:none; margin: 20px 0;">
+        <h3>📝 Manual Code Input:</h3>
+        <p>Paste the authorization code you got from the redirect:</p>
+        <input type="text" id="auth-code" placeholder="Paste authorization code here" style="width: 500px; padding: 8px;">
+        <button onclick="submitManualCode()">Submit Code</button>
+    </div>
+    
+    <div id="result"></div>
+    <pre id="logs"></pre>
+
+    <script>
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('logs');
+            logElement.textContent = `[${timestamp}] ${message}\n` + logElement.textContent;
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function manualAuth() {
+            // Create authorization URL manually
+            const clientId = '756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com';
+            const redirectUri = 'http://localhost:5173';  // Your configured redirect URI
+            const scope = 'openid email profile';
+            const responseType = 'code';
+            const state = 'random_state_' + Math.random().toString(36).substring(7);
+            
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${encodeURIComponent(clientId)}&` +
+                `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+                `scope=${encodeURIComponent(scope)}&` +
+                `response_type=${responseType}&` +
+                `state=${state}&` +
+                `access_type=offline&` +
+                `prompt=consent`;
+            
+            log('🔗 Generated auth URL: ' + authUrl);
+            updateStatus('Opening Google authorization page...', 'info');
+            
+            // Open in new tab
+            window.open(authUrl, '_blank');
+            
+            // Show manual input
+            document.getElementById('manual-input').style.display = 'block';
+            updateStatus('Complete the authorization in the new tab, then paste the code below', 'info');
+        }
+
+        async function submitManualCode() {
+            const code = document.getElementById('auth-code').value.trim();
+            if (!code) {
+                updateStatus('❌ Please enter authorization code', 'error');
+                return;
+            }
+            
+            log('📝 Manual code entered: ' + code.substring(0, 20) + '...');
+            await sendCodeToBackend(code);
+        }
+
+        async function sendCodeToBackend(authCode) {
+            try {
+                log('🔄 Sending code to backend...');
+                updateStatus('Sending authorization code to backend...', 'info');
+                
+                const response = await fetch('http://localhost:8000/api/v1/auth/google/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        authorization_code: authCode
+                    })
+                });
+
+                const result = await response.json();
+                log('📨 Backend response: ' + JSON.stringify(result, null, 2));
+                
+                if (result.status) {
+                    updateStatus('🎉 Login successful!', 'success');
+                    if (result.jwt_token) {
+                        localStorage.setItem('jwt_token', result.jwt_token);
+                        log('💾 JWT token saved');
+                    }
+                } else {
+                    updateStatus('❌ Login failed: ' + result.message, 'error');
+                }
+                
+                document.getElementById('result').innerHTML = '<h3>Result:</h3><pre>' + JSON.stringify(result, null, 2) + '</pre>';
+                
+            } catch (error) {
+                const errorMsg = 'Network error: ' + error.message;
+                updateStatus('❌ ' + errorMsg, 'error');
+                log('💥 ' + errorMsg);
+            }
+        }
+
+        function testWithCode() {
+            // For testing purposes
+            const testCode = prompt('Enter test authorization code:');
+            if (testCode) {
+                sendCodeToBackend(testCode);
+            }
+        }
+
+        window.onload = function() {
+            log('🚀 Alternative auth method loaded');
+            updateStatus('Choose an authentication method above', 'info');
+        };
+    </script>
+</body>
+</html>

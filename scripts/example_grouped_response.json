@@ -1,0 +1,33 @@
+{
+    "status": true,
+    "total": 2,
+    "data": [
+        {
+            "id": "68c1416257d8efc008ba39c4",
+            "vocabs": [
+                "hey",
+                "beautiful"
+            ],
+            "is_group": true,
+            "paragraphs": [
+                "long paragraph",
+                "long paragraph adfadsf"
+            ],
+            "total_paragraphs": 3
+        },
+        {
+            "id": "68c14d2eb1755062af1f0832",
+            "vocabs": [
+                "new",
+                "refactor",
+                "test"
+            ],
+            "is_group": true,
+            "paragraphs": [
+                "This is a test with completely new vocabularies that should create a new input history.",
+                "This paragraph uses the same vocabularies as before, so it should reuse the existing input history ID."
+            ],
+            "total_paragraphs": 2
+        }
+    ]
+}

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Auth Debug</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1000px; }
+        .debug { background: #f8f9fa; padding: 15px; margin: 10px 0; border-left: 4px solid #007bff; }
+        .error { background: #f8d7da; padding: 15px; margin: 10px 0; border-left: 4px solid #dc3545; }
+        .success { background: #d4edda; padding: 15px; margin: 10px 0; border-left: 4px solid #28a745; }
+        button { padding: 12px 24px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        pre { background: #f1f3f4; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+        input { width: 500px; padding: 8px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🐛 Google Auth Debug Tool</h1>
+    
+    <div class="debug">
+        <h3>🔧 Debug Information</h3>
+        <p><strong>Client ID:</strong> 756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com</p>
+        <p><strong>Expected Redirect URI:</strong> http://localhost:5173</p>
+        <p><strong>Backend URL:</strong> http://localhost:8000</p>
+    </div>
+    
+    <div>
+        <h3>🧪 Test Methods</h3>
+        <button onclick="testPopup()">1. Test Popup Mode</button>
+        <button onclick="testManualRedirect()">2. Manual Redirect</button>
+        <button onclick="testDebugEndpoint()">3. Test Debug Endpoint</button>
+    </div>
+    
+    <div id="manual-section" style="display: none;">
+        <h3>📝 Manual Code Test</h3>
+        <input type="text" id="manual-code" placeholder="Paste authorization code here">
+        <button onclick="testManualCode()">Test Code</button>
+        <button onclick="debugManualCode()">Debug Code</button>
+    </div>
+    
+    <div id="status"></div>
+    <div id="results"></div>
+    <pre id="logs"></pre>
+
+    <script>
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('logs');
+            logElement.textContent = `[${timestamp}] ${message}\n` + logElement.textContent;
+        }
+
+        function showStatus(message, type = 'debug') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="${type}"><strong>${type.toUpperCase()}:</strong> ${message}</div>`;
+        }
+
+        function showResults(data) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<h3>📊 Results:</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+
+        // Method 1: Popup Mode
+        function testPopup() {
+            log('🔄 Testing popup mode...');
+            showStatus('Initializing popup mode...', 'debug');
+            
+            if (typeof google === 'undefined') {
+                showStatus('Google scripts not loaded yet!', 'error');
+                return;
+            }
+
+            const client = google.accounts.oauth2.initCodeClient({
+                client_id: '756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com',
+                scope: 'openid email profile',
+                ux_mode: 'popup',
+                callback: async (response) => {
+                    log('📨 Popup callback: ' + JSON.stringify(response));
+                    if (response.code) {
+                        showStatus('Got authorization code from popup, testing...', 'debug');
+                        await testAuthCode(response.code);
+                    } else {
+                        showStatus('No code received from popup!', 'error');
+                    }
+                },
+            });
+
+            client.requestCode();
+        }
+
+        // Method 2: Manual Redirect
+        function testManualRedirect() {
+            log('🔗 Opening manual redirect...');
+            document.getElementById('manual-section').style.display = 'block';
+            
+            const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+                'client_id=756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com&' +
+                'redirect_uri=http://localhost:5173&' +
+                'scope=openid email profile&' +
+                'response_type=code&' +
+                'access_type=offline&' +
+                'prompt=consent';
+            
+            showStatus('Opening redirect URL in new tab...', 'debug');
+            window.open(authUrl, '_blank');
+        }
+
+        // Method 3: Test with manual code
+        async function testManualCode() {
+            const code = document.getElementById('manual-code').value.trim();
+            if (!code) {
+                showStatus('Please enter authorization code!', 'error');
+                return;
+            }
+            await testAuthCode(code);
+        }
+
+        // Method 4: Debug with manual code
+        async function debugManualCode() {
+            const code = document.getElementById('manual-code').value.trim();
+            if (!code) {
+                showStatus('Please enter authorization code!', 'error');
+                return;
+            }
+            await debugAuthCode(code);
+        }
+
+        // Test authorization code with normal endpoint
+        async function testAuthCode(authCode) {
+            try {
+                log(`🧪 Testing auth code: ${authCode.substring(0, 20)}...`);
+                showStatus('Sending to normal login endpoint...', 'debug');
+                
+                const response = await fetch('http://localhost:8000/api/v1/auth/google/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ authorization_code: authCode })
+                });
+
+                const result = await response.json();
+                log('📨 Normal endpoint result: ' + JSON.stringify(result));
+                
+                if (result.status) {
+                    showStatus('✅ Login successful!', 'success');
+                } else {
+                    showStatus(`❌ Login failed: ${result.message}`, 'error');
+                }
+                
+                showResults(result);
+                
+            } catch (error) {
+                log('💥 Network error: ' + error.message);
+                showStatus(`Network error: ${error.message}`, 'error');
+            }
+        }
+
+        // Debug authorization code with debug endpoint
+        async function debugAuthCode(authCode) {
+            try {
+                log(`🐛 Debug testing auth code: ${authCode.substring(0, 20)}...`);
+                showStatus('Sending to debug endpoint...', 'debug');
+                
+                const response = await fetch('http://localhost:8000/api/v1/auth/debug-exchange', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ authorization_code: authCode })
+                });
+
+                const result = await response.json();
+                log('🐛 Debug endpoint result: ' + JSON.stringify(result));
+                
+                if (result.status) {
+                    showStatus('🐛 Debug exchange successful!', 'success');
+                } else {
+                    showStatus(`🐛 Debug failed: ${result.message}`, 'error');
+                }
+                
+                showResults(result);
+                
+            } catch (error) {
+                log('💥 Debug network error: ' + error.message);
+                showStatus(`Debug network error: ${error.message}`, 'error');
+            }
+        }
+
+        // Test debug endpoint without code
+        async function testDebugEndpoint() {
+            try {
+                log('🐛 Testing debug endpoint with dummy code...');
+                await debugAuthCode('dummy_code_for_testing');
+            } catch (error) {
+                log('💥 Debug test error: ' + error.message);
+            }
+        }
+
+        window.onload = function() {
+            log('🚀 Debug tool loaded');
+            showStatus('Debug tool ready. Choose a test method above.', 'debug');
+        };
+    </script>
+</body>
+</html>

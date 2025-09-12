@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Google Auth Test</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    <h1>Simple Google Auth Test</h1>
+    <div id="status">Ready to test...</div>
+    <button id="signin">Sign In with Google</button>
+    <div id="result"></div>
+
+    <script>
+        function initGoogleAuth() {
+            // Use the simpler approach without redirect_uri for popup mode
+            const client = google.accounts.oauth2.initCodeClient({
+                client_id: '756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com',
+                scope: 'openid email profile',
+                ux_mode: 'popup',
+                callback: handleAuthCode,
+            });
+
+            document.getElementById('signin').onclick = () => {
+                document.getElementById('status').textContent = 'Starting Google Auth...';
+                client.requestCode();
+            };
+        }
+
+        async function handleAuthCode(response) {
+            const statusDiv = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            
+            if (response.code) {
+                statusDiv.textContent = 'Got authorization code, sending to backend...';
+                console.log('Authorization code:', response.code);
+                
+                try {
+                    const apiResponse = await fetch('http://localhost:8000/api/v1/auth/google/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            authorization_code: response.code
+                        })
+                    });
+
+                    const result = await apiResponse.json();
+                    
+                    statusDiv.textContent = result.status ? 'Success!' : 'Failed!';
+                    resultDiv.innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+                    
+                } catch (error) {
+                    statusDiv.textContent = 'Network error!';
+                    resultDiv.textContent = 'Error: ' + error.message;
+                }
+            } else {
+                statusDiv.textContent = 'No authorization code received';
+                resultDiv.textContent = 'OAuth flow failed';
+            }
+        }
+
+        // Initialize when Google scripts load
+        window.onload = function() {
+            if (typeof google !== 'undefined') {
+                initGoogleAuth();
+            } else {
+                setTimeout(() => {
+                    if (typeof google !== 'undefined') {
+                        initGoogleAuth();
+                    } else {
+                        document.getElementById('status').textContent = 'Google scripts failed to load';
+                    }
+                }, 2000);
+            }
+        };
+    </script>
+</body>
+</html>

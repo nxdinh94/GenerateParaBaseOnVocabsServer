@@ -4,3 +4,9 @@ httpx
 pydantic
 python-dotenv
 google-genai   # Google Gen AI SDK (gemini). Cài theo docs của Google.
+motor          # Async MongoDB driver
+pymongo        # MongoDB driver
+bcrypt         # For password hashing
+google-auth    # Google Auth library
+google-auth-oauthlib  # Google OAuth library
+PyJWT          # For JWT token handling

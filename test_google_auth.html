@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Auth Test</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #3367d6;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .user-info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .profile-pic {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin-right: 20px;
+            vertical-align: middle;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Google Authentication Test</h1>
+    
+    <div class="info">
+        <strong>Hướng dẫn:</strong>
+        <ol>
+            <li>Nhấn "Sign in with Google"</li>
+            <li>Hoàn thành đăng nhập Google</li>
+            <li>Authorization code sẽ được gửi tự động đến FastAPI backend</li>
+            <li>Kiểm tra kết quả và test các chức năng khác</li>
+        </ol>
+    </div>
+
+    <div class="container">
+        <h3>🔐 Authentication Status</h3>
+        <div id="auth-status">Not logged in</div>
+        
+        <div id="login-section">
+            <button id="google-signin">Sign in with Google</button>
+        </div>
+        
+        <div id="user-section" style="display: none;">
+            <div id="user-info"></div>
+            <button onclick="testApiCall()">Test API Call</button>
+            <button onclick="checkToken()">Verify Token</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div id="messages"></div>
+    
+    <div class="container">
+        <h3>📋 API Response Logs</h3>
+        <pre id="logs"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        let currentUser = null;
+        let jwtToken = null;
+
+        // Logging function
+        function log(message, data = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('logs');
+            let logText = `[${timestamp}] ${message}`;
+            if (data) {
+                logText += '\n' + JSON.stringify(data, null, 2);
+            }
+            logText += '\n---\n';
+            logElement.textContent = logText + logElement.textContent;
+        }
+
+        // Show message to user
+        function showMessage(text, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = text;
+            messagesDiv.appendChild(messageDiv);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        // Initialize Google Sign-In
+        function initializeGoogleSignIn() {
+            google.accounts.id.initialize({
+                client_id: '756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com',
+                callback: handleCredentialResponse,
+                auto_select: false,
+                cancel_on_tap_outside: false
+            });
+
+            // Code flow for getting authorization code
+            const client = google.accounts.oauth2.initCodeClient({
+                client_id: '756122901210-sio4ctpgk3rctud9fe96speujjd0v8i1.apps.googleusercontent.com',
+                scope: 'openid email profile',
+                ux_mode: 'popup',
+                redirect_uri: 'http://localhost:5173',  // Match với .env
+                callback: handleAuthCode,
+            });
+
+            document.getElementById('google-signin').onclick = () => {
+                log('🔄 Initiating Google OAuth flow...');
+                client.requestCode();
+            };
+        }
+
+        // Handle authorization code from Google
+        async function handleAuthCode(response) {
+            if (response.code) {
+                log('✅ Authorization code received', { code: response.code.substring(0, 20) + '...' });
+                
+                try {
+                    // Send code to our FastAPI backend
+                    const apiResponse = await fetch(`${API_BASE}/auth/google/login`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            authorization_code: response.code
+                        })
+                    });
+
+                    const result = await apiResponse.json();
+                    log('📨 FastAPI Response', result);
+
+                    if (result.status) {
+                        // Success!
+                        currentUser = result.user_info;
+                        jwtToken = result.jwt_token;
+                        
+                        // Store tokens
+                        localStorage.setItem('jwt_token', result.jwt_token);
+                        localStorage.setItem('google_access_token', result.access_token);
+                        localStorage.setItem('user_info', JSON.stringify(result.user_info));
+                        
+                        updateUI();
+                        showMessage('✅ Login successful!', 'success');
+                        log('🎉 Login successful, JWT token generated');
+                        
+                    } else {
+                        showMessage(`❌ Login failed: ${result.message}`, 'error');
+                        log('❌ Login failed', result);
+                    }
+                } catch (error) {
+                    console.error('API Error:', error);
+                    showMessage(`❌ Network error: ${error.message}`, 'error');
+                    log('💥 API Error', { error: error.message });
+                }
+            } else {
+                showMessage('❌ No authorization code received', 'error');
+                log('❌ OAuth flow failed - no code received');
+            }
+        }
+
+        // Handle credential response (not used in auth code flow, but kept for reference)
+        function handleCredentialResponse(response) {
+            console.log("Encoded JWT ID token: " + response.credential);
+        }
+
+        // Update UI based on login status
+        function updateUI() {
+            const authStatus = document.getElementById('auth-status');
+            const loginSection = document.getElementById('login-section');
+            const userSection = document.getElementById('user-section');
+            const userInfo = document.getElementById('user-info');
+
+            if (currentUser && jwtToken) {
+                authStatus.innerHTML = `<span style="color: green;">✅ Logged in as ${currentUser.name}</span>`;
+                loginSection.style.display = 'none';
+                userSection.style.display = 'block';
+                
+                userInfo.innerHTML = `
+                    <div class="user-info">
+                        <img src="${currentUser.picture}" alt="Profile" class="profile-pic">
+                        <div style="display: inline-block; vertical-align: middle;">
+                            <h4>${currentUser.name}</h4>
+                            <p>📧 ${currentUser.email}</p>
+                            <p>🔒 Verified: ${currentUser.verified_email ? '✅' : '❌'}</p>
+                            <p>🆔 ID: ${currentUser.id}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                authStatus.innerHTML = '<span style="color: red;">❌ Not logged in</span>';
+                loginSection.style.display = 'block';
+                userSection.style.display = 'none';
+            }
+        }
+
+        // Test API call with JWT token
+        async function testApiCall() {
+            if (!jwtToken) {
+                showMessage('❌ No JWT token available', 'error');
+                return;
+            }
+
+            try {
+                log('🧪 Testing API call with JWT token...');
+                
+                const response = await fetch(`${API_BASE}/auth/profile`, {
+                    headers: {
+                        'Authorization': `Bearer ${jwtToken}`,
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const result = await response.json();
+                log('📨 Profile API Response', result);
+
+                if (result.status) {
+                    showMessage('✅ API call successful!', 'success');
+                } else {
+                    showMessage(`❌ API call failed: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('API call error:', error);
+                showMessage(`❌ API call error: ${error.message}`, 'error');
+                log('💥 API call error', { error: error.message });
+            }
+        }
+
+        // Check token validity
+        async function checkToken() {
+            if (!jwtToken) {
+                showMessage('❌ No JWT token available', 'error');
+                return;
+            }
+
+            try {
+                log('🔍 Checking token validity...');
+                
+                const response = await fetch(`${API_BASE}/auth/verify-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        token: jwtToken
+                    })
+                });
+
+                const result = await response.json();
+                log('📨 Token verification response', result);
+
+                if (result.status) {
+                    showMessage('✅ Token is valid!', 'success');
+                } else {
+                    showMessage(`❌ Token is invalid: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('Token check error:', error);
+                showMessage(`❌ Token check error: ${error.message}`, 'error');
+                log('💥 Token check error', { error: error.message });
+            }
+        }
+
+        // Logout
+        function logout() {
+            currentUser = null;
+            jwtToken = null;
+            localStorage.removeItem('jwt_token');
+            localStorage.removeItem('google_access_token');
+            localStorage.removeItem('user_info');
+            
+            updateUI();
+            showMessage('👋 Logged out successfully', 'info');
+            log('👋 User logged out');
+        }
+
+        // Check if user is already logged in when page loads
+        function checkExistingLogin() {
+            const storedToken = localStorage.getItem('jwt_token');
+            const storedUser = localStorage.getItem('user_info');
+            
+            if (storedToken && storedUser) {
+                try {
+                    jwtToken = storedToken;
+                    currentUser = JSON.parse(storedUser);
+                    updateUI();
+                    log('🔄 Restored login from localStorage');
+                } catch (error) {
+                    console.error('Error restoring login:', error);
+                    logout();
+                }
+            }
+        }
+
+        // Initialize when page loads
+        window.onload = function() {
+            log('🚀 Google Auth Test Page Loaded');
+            log('📡 API Base URL: ' + API_BASE);
+            
+            checkExistingLogin();
+            updateUI();
+            
+            // Initialize Google Sign-In when script loads
+            if (typeof google !== 'undefined') {
+                initializeGoogleSignIn();
+            } else {
+                // Wait for Google script to load
+                setTimeout(() => {
+                    if (typeof google !== 'undefined') {
+                        initializeGoogleSignIn();
+                    } else {
+                        showMessage('❌ Google Sign-In script failed to load', 'error');
+                    }
+                }, 2000);
+            }
+        };
+    </script>
+</body>
+</html>
