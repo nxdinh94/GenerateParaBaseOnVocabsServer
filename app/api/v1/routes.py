@@ -423,19 +423,6 @@ async def generate_text(req: schemas.GenerateRequest):
         logger.exception("Error calling Gemini")
         raise HTTPException(status_code=500, detail=str(e))
 
-# === English Lesson ===
-@router.post("/english/lesson", response_model=schemas.LessonResponse)
-async def english_lesson(req: schemas.LessonRequest):
-    try:
-        prompt = (
-            f"Give a short English lesson for beginners about the topic: {req.topic}. "
-            "Include: explanation, 2 simple examples, and a short exercise."
-        )
-        res_text = await gemini_client.generate_text(prompt, req.max_tokens or 300)
-        return schemas.LessonResponse(topic=req.topic, lesson=res_text)
-    except Exception as e:
-        logger.exception("Error generating lesson")
-        raise HTTPException(status_code=500, detail=str(e))
 
 # === Paragraph with vocabularies ===
 @router.post("/generate-paragraph", response_model=schemas.ParagraphResponse)
@@ -492,7 +479,7 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
 
 # === Save paragraph and vocabularies ===
 @router.post("/save-paragraph", response_model=schemas.SaveParagraphResponse)
-async def save_paragraph(req: schemas.SaveParagraphRequest):
+async def save_paragraph(req: schemas.SaveParagraphRequest, current_user: dict = Depends(get_current_user)):
     """
     Save paragraph and vocabularies to database
     If vocabularies already exist, reuse existing input_history_id
@@ -517,9 +504,13 @@ async def save_paragraph(req: schemas.SaveParagraphRequest):
         input_history_crud = get_input_history_crud()
         saved_paragraph_crud = get_saved_paragraph_crud()
         
-        # For this demo, we'll use the default user ID
-        # In real app, you would get user_id from authentication
-        default_user_id = "68c13d6181373f816d763a41"  # Default user ID from database
+        # Get user ID from authenticated user
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
         
         # Normalize input vocabularies (lowercase and sorted for comparison)
         input_vocabs = sorted([word.lower().strip() for word in req.vocabs if word.strip()])
@@ -531,7 +522,7 @@ async def save_paragraph(req: schemas.SaveParagraphRequest):
             })
         
         # Check if these exact vocabularies already exist
-        existing_input_history = await input_history_crud.find_by_exact_words(default_user_id, input_vocabs)
+        existing_input_history = await input_history_crud.find_by_exact_words(user_id, input_vocabs)
         
         if existing_input_history:
             # Use existing input history
