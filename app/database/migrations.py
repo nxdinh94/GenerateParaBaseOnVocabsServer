@@ -12,7 +12,8 @@ import logging
 from app.database.models import (
     UserInDB,
     InputHistoryInDB, 
-    SavedParagraphInDB
+    SavedParagraphInDB,
+    RefreshTokenInDB
 )
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,36 @@ class SchemaMigration:
                             "created_at": {
                                 "bsonType": "date",
                                 "description": "Paragraph creation timestamp"
+                            }
+                        }
+                    }
+                }
+            },
+            "refresh_tokens": {
+                "model": RefreshTokenInDB,
+                "indexes": [
+                    IndexModel([("user_id", ASCENDING)], name="user_id_asc"),
+                    IndexModel([("created_at", DESCENDING)], name="created_at_desc"),
+                    IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_created_compound"),
+                    IndexModel([("refresh_token", ASCENDING)], unique=True, name="refresh_token_unique"),
+                ],
+                "validation": {
+                    "$jsonSchema": {
+                        "bsonType": "object",
+                        "required": ["user_id", "refresh_token", "created_at"],
+                        "properties": {
+                            "user_id": {
+                                "bsonType": "objectId",
+                                "description": "Reference to user document"
+                            },
+                            "refresh_token": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                                "description": "JWT refresh token string"
+                            },
+                            "created_at": {
+                                "bsonType": "date",
+                                "description": "Token creation timestamp"
                             }
                         }
                     }

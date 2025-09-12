@@ -74,6 +74,59 @@ class UserResponse(BaseModel):
         "populate_by_name": True,
     }
 
+# Refresh Token Models
+class RefreshTokenCreate(BaseModel):
+    user_id: PyObjectId
+    refresh_token: str = Field(..., min_length=1)
+    
+    @field_validator('user_id', mode='before')
+    @classmethod
+    def validate_user_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid user_id ObjectId")
+
+class RefreshTokenInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    user_id: PyObjectId
+    refresh_token: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid ObjectId")
+    
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+    }
+
+class RefreshTokenResponse(BaseModel):
+    id: PyObjectId = Field(alias="_id")
+    user_id: PyObjectId
+    refresh_token: str
+    created_at: datetime
+    
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+    
+    model_config = {
+        "populate_by_name": True,
+    }
+
 # Input History Models
 class InputHistoryCreate(BaseModel):
     user_id: PyObjectId
