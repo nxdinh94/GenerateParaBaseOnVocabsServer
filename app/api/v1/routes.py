@@ -426,6 +426,7 @@ async def generate_text(req: schemas.GenerateRequest):
 
 
 # === Paragraph with vocabularies ===
+# Generate paragraph then save vocabularies to input_history collection if authenticated
 @router.post("/generate-paragraph", response_model=schemas.ParagraphResponse)
 async def generate_paragraph(req: schemas.ParagraphRequest):
     try:
@@ -458,7 +459,7 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
         base_prompt = (
             f"Write only one {req.length} paragraph in {req.language} "
             f"at {req.level} level with a {req.tone} tone. The paragraph must include these vocabularies: "
-            f"{', '.join(req.vocabularies)}."
+            f"{', '.join(req.vocabularies)}. Make sure to use all the vocabularies at least once."
         )
         if req.prompt:
             final_prompt = f"{base_prompt}\nAdditional instruction: {req.prompt}"
