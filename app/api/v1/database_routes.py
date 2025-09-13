@@ -1,14 +1,14 @@
 """
 API routes for database operations
 """
-from typing import List
-from fastapi import APIRouter, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, status, Header, Response
 from bson import ObjectId
 
 from app.database.crud import get_user_crud, get_input_history_crud, get_saved_paragraph_crud
 from app.database.models import (
     UserCreate, UserResponse, UserUpdate,
-    InputHistoryCreate, InputHistoryResponse,
+    InputHistoryCreate, InputHistoryCreateInternal, InputHistoryResponse,
     SavedParagraphCreate, SavedParagraphResponse
 )
 
@@ -102,21 +102,41 @@ async def delete_user(user_id: str):
     return {"message": "User deleted successfully"}
 
 # Input History routes
-@router.post("/input-history/", response_model=InputHistoryResponse, status_code=status.HTTP_201_CREATED)
-async def create_input_history(history_data: InputHistoryCreate):
-    """Create new input history"""
-    user_crud = get_user_crud()
+@router.post("/input-history/", response_model=InputHistoryResponse)
+async def create_input_history(history_data: InputHistoryCreate, response: Response, authorization: Optional[str] = Header(None)):
+    """Create new input history or return existing one if vocabulary already exists"""
+    from app.api.v1.routes import get_current_user
+    
+    # Get current user from JWT token
+    current_user = await get_current_user(authorization)
+    user_id = current_user["user_id"]
+    
     input_history_crud = get_input_history_crud()
     
-    # Verify user exists
-    user = await user_crud.get_user_by_id(str(history_data.user_id))
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User not found"
-        )
+    # Debug: Log the incoming request
+    print(f"🔍 DEBUG: Checking for duplicate words {history_data.words} for user {user_id}")
     
-    history = await input_history_crud.create_input_history(history_data)
+    # Check if input history with same words already exists for this user
+    existing_history = await input_history_crud.find_by_exact_words(user_id, history_data.words)
+    
+    if existing_history:
+        # Return existing history with 200 OK status
+        print(f"✅ DEBUG: Found existing history with ID {existing_history.id}")
+        response.status_code = status.HTTP_200_OK
+        return InputHistoryResponse(**existing_history.dict())
+    
+    # Debug: Log that we're creating new entry
+    print(f"🆕 DEBUG: No duplicate found, creating new input history")
+    
+    # Create history data with user_id from token
+    history_create_data = InputHistoryCreateInternal(
+        user_id=user_id,
+        words=history_data.words
+    )
+    
+    # Create new history if it doesn't exist
+    history = await input_history_crud.create_input_history(history_create_data)
+    response.status_code = status.HTTP_201_CREATED
     return InputHistoryResponse(**history.dict())
 
 @router.get("/input-history/{history_id}", response_model=InputHistoryResponse)

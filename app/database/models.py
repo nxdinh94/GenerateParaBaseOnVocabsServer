@@ -145,6 +145,9 @@ class RefreshTokenResponse(BaseModel):
 
 # Input History Models
 class InputHistoryCreate(BaseModel):
+    words: List[str] = Field(..., min_length=1)
+
+class InputHistoryCreateInternal(BaseModel):
     user_id: PyObjectId
     words: List[str] = Field(..., min_length=1)
     

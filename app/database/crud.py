@@ -13,7 +13,7 @@ from app.database.connection import get_collection
 from app.database.models import (
     UserCreate, GoogleUserCreate, UserInDB, UserUpdate, UserResponse,
     RefreshTokenCreate, RefreshTokenInDB, RefreshTokenResponse,
-    InputHistoryCreate, InputHistoryInDB, InputHistoryResponse,
+    InputHistoryCreate, InputHistoryCreateInternal, InputHistoryInDB, InputHistoryResponse,
     SavedParagraphCreate, SavedParagraphInDB, SavedParagraphResponse
 )
 
@@ -185,7 +185,7 @@ class InputHistoryCRUD:
     def collection(self) -> AsyncIOMotorCollection:
         return get_collection("input_history")
     
-    async def create_input_history(self, history_data: InputHistoryCreate) -> InputHistoryInDB:
+    async def create_input_history(self, history_data: InputHistoryCreateInternal) -> InputHistoryInDB:
         """Create new input history"""
         history_dict = history_data.dict()
         # Convert user_id string to ObjectId for storage
@@ -214,20 +214,42 @@ class InputHistoryCRUD:
     
     async def find_by_exact_words(self, user_id: str, words: List[str]) -> Optional[InputHistoryInDB]:
         """Find input history by exact word match for a user"""
-        # Sort words for consistent comparison
-        sorted_words = sorted([word.lower().strip() for word in words if word.strip()])
+        # Normalize and sort words for consistent comparison
+        def normalize_words(word_list):
+            # Filter out empty/whitespace-only words, convert to lowercase, strip, and sort
+            normalized = []
+            for word in word_list:
+                if isinstance(word, str):
+                    cleaned = word.strip().lower()
+                    if cleaned:  # Only add non-empty words
+                        normalized.append(cleaned)
+            return sorted(normalized)
+        
+        target_words = normalize_words(words)
+        print(f"🔍 DEBUG: Looking for normalized words: {target_words}")
+        
+        # Don't search if no valid words provided
+        if not target_words:
+            print("⚠️ DEBUG: No valid words provided, returning None")
+            return None
         
         # Find all input histories for the user
         cursor = self.collection.find({"user_id": ObjectId(user_id)})
         
+        count = 0
         async for history in cursor:
-            # Normalize existing words for comparison
-            existing_words = sorted([word.lower().strip() for word in history.get('words', []) if word.strip()])
+            count += 1
+            # Get the words from the document
+            history_words = history.get('words', [])
+            existing_words = normalize_words(history_words)
+            print(f"🔍 DEBUG: Comparing with existing #{count}: {existing_words}")
             
             # Check if words match exactly
-            if existing_words == sorted_words:
+            if existing_words == target_words:
+                print(f"✅ DEBUG: Match found at record #{count}!")
                 return InputHistoryInDB(**history)
         
+        print(f"❌ DEBUG: No match found among {count} records")
         return None
     
     async def delete_input_history(self, history_id: str) -> bool:
