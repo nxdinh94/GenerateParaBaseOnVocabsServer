@@ -131,9 +131,7 @@ async def google_login(req: schemas.GoogleLoginRequest):
         logger.info(f"✅ User {user_info.get('email')} logged in successfully")
         
         return schemas.GoogleLoginResponse(
-            access_token=auth_result.get("access_token"),
             jwt_token=jwt_token,
-            refresh_token=auth_result.get("refresh_token"),
             jwt_refresh_token=jwt_refresh_token
         )
         
@@ -413,6 +411,42 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         })
     
     return user_data
+
+@router.post("/auth/logout", response_model=schemas.LogoutResponse)
+async def logout(current_user: dict = Depends(get_current_user)):
+    """
+    Logout user by deleting all JWT refresh tokens from database
+    Requires Bearer token in Authorization header
+    """
+    try:
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
+        
+        refresh_token_crud = get_refresh_token_crud()
+        
+        # Delete all refresh tokens for this user
+        deleted_count = await refresh_token_crud.delete_user_refresh_tokens(user_id)
+        
+        logger.info(f"🚪 User {current_user.get('email')} logged out. Deleted {deleted_count} refresh tokens.")
+        
+        return schemas.LogoutResponse(
+            status=True,
+            message=f"Logout successful. {deleted_count} refresh token(s) deleted."
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error during logout")
+        raise HTTPException(status_code=500, detail={
+            "error": "logout_failed",
+            "message": "Failed to logout user",
+            "details": str(e)
+        })
 
 # === Generic text generation ===
 @router.post("/generate", response_model=schemas.GenerateResponse)

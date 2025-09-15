@@ -93,10 +93,8 @@ class UserInfo(BaseModel):
     verified_email: Optional[bool] = None
 
 class GoogleLoginResponse(BaseModel):
-    access_token: Optional[str] = None
-    jwt_token: Optional[str] = None
-    refresh_token: Optional[str] = None
-    jwt_refresh_token: Optional[str] = None
+    jwt_token: str
+    jwt_refresh_token: str
 
 class TokenVerifyRequest(BaseModel):
     token: str
@@ -124,3 +122,8 @@ class RenewJWTResponse(BaseModel):
     message: str
     jwt_token: str
     user_data: Optional[dict] = None
+
+# === Logout ===
+class LogoutResponse(BaseModel):
+    status: bool
+    message: str
