@@ -488,12 +488,52 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
                 "error": "invalid_length",
                 "message": "Length must be a positive number"
             })
-
+        
+        paragraphLength = req.length if req.length and req.length > 0 else 1
+        print(paragraphLength)
         base_prompt = (
-            f"Write only one {req.length} paragraph in {req.language} "
-            f"at {req.level} level with a {req.tone} tone. The paragraph must include these vocabularies: "
-            f"{', '.join(req.vocabularies)}. Make sure to use all the vocabularies at least once. Hight light the vocabularies in bold in the paragraph."
-        )
+            f"Write only one {"sentence" if paragraphLength == 1 else "paragraph with {paragraphLength} in length"} in {req.language} "
+            f"at {req.level} level with a {req.tone} tone and {"beginner" if req.topic == '' else req.topic} topic. The paragraph must include these vocabularies: "
+            f"{', '.join(req.vocabularies)}. Make sure to use all the vocabularies at least once."
+            f"Highlight the vocabularies in bold in the paragraph."
+            f"Also list all the meaning of this vocabs base on Cambridge, give example for each meaning."
+            f"Finally, explain the meaning of the vocabularies in the paragraph, which meanings is use in the paragraph."
+            f"always return data following json format:"
+            f"{
+                { 
+                    "paragraph": "", 
+                    "explain_vocabs": { 
+                        "vocabulary_1": [ 
+                            {
+                                "phonetic_transcription": "",
+                                "part_of_speech": "",
+                                "synonyms": [""],
+                                "antonyms": [""]
+                            },
+                            { 
+                                "meaning": "", 
+                                "example": "",
+                               
+                            }, 
+                           { 
+                                "meaning": "", 
+                                "example": "",
+                            }, 
+                    
+                        ],
+                        "vocabulary_2": [ 
+                            { 
+                                "meaning": "", 
+                                "example": "",
+                            }, 
+                        ]
+                    }, 
+                    "explanation_in_paragraph": {
+                        "vocabulary_1": "explanation of meaning used in paragraph, hightlight the vocabularies in bold",
+                        "vocabulary_2": "explanation of meaning used in paragraph, hightlight the vocabularies in bold"
+                    }
+                }}"
+            )
         if req.prompt:
             final_prompt = f"{base_prompt}\nAdditional instruction: {req.prompt}"
         else:
