@@ -495,46 +495,36 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
         print(paragraphLength)
         print(paragraphLength)
         base_prompt = (
-            f"Write only one meaningful {"sentence" if paragraphLength == 1 else "paragraph with {paragraphLength} words"} in {req.language} "
-            f"at {req.level} level with a {req.tone} tone and {"beginner" if req.topic == '' else req.topic} topic. The paragraph must include these vocabularies: "
-            f"{', '.join(req.vocabularies)}. Make sure to use all the vocabularies at least once."
-            f"Highlight the vocabularies in bold in the paragraph."
-            f"Also list all the meaning of this vocabs base on Cambridge indeed, give example for each meaning."
-            f"Finally, explain the meaning of the vocabularies in the paragraph, which meanings is use in the paragraph."
-            f"always return data following json format:"
-            f"{
-                { 
-                    "paragraph": "", 
-                    "explain_vocabs": { 
-                        "vocabulary_1": [ 
-                            {
-                                "phonetic_transcription": "",
-                                "part_of_speech": "",
-                            },
-                            { 
-                                "meaning": "", 
-                                "example": "",
-                               
-                            }, 
-                           { 
-                                "meaning": "", 
-                                "example": "",
-                            }, 
-                    
-                        ],
-                        "vocabulary_2": [ 
-                            { 
-                                "meaning": "", 
-                                "example": "",
-                            }, 
-                        ]
-                    }, 
-                    "explanation_in_paragraph": {
-                        "vocabulary_1": "explanation of meaning used in paragraph, hightlight the vocabularies in bold",
-                        "vocabulary_2": "explanation of meaning used in paragraph, hightlight the vocabularies in bold"
-                    }
-                }}"
-            )
+            f"Write {'one meaningful sentence' if paragraphLength == 1 else f'one meaningful paragraph of {paragraphLength} words'} "
+            f"in {req.language}, at {req.level} level, with a {req.tone} tone, "
+            f"about the topic: {req.topic if req.topic else 'beginner'}. "
+            f"The text must include all of the following vocabularies at least once: {', '.join(req.vocabularies)}. "
+            f"Only highlight each vocabulary in **bold** in the text, ignore all other text.\n\n"
+            f"Then, for each vocabulary:\n"
+            f"1. Provide phonetic transcription and part of speech.\n"
+            f"2. List all meanings based on the Cambridge Dictionary, and give one example for each meaning.\n"
+            f"3. Indicate which specific meaning is used in the generated text.\n\n"
+            f"Return the final result strictly in the following JSON format:\n"
+            f"{{\n"
+            f'  "paragraph": "<the generated text>",\n'
+            f'  "explain_vocabs": {{\n'
+            f'    "vocabulary_1": [\n'
+            f'      {{ "phonetic_transcription": "<IPA>", "part_of_speech": "<pos>" }},\n'
+            f'      {{ "meaning": "<meaning 1>", "example": "<example sentence>" }},\n'
+            f'      {{ "meaning": "<meaning 2>", "example": "<example sentence>" }}\n'
+            f'    ],\n'
+            f'    "vocabulary_2": [\n'
+            f'      {{ "phonetic_transcription": "<IPA>", "part_of_speech": "<pos>" }},\n'
+            f'      {{ "meaning": "<meaning>", "example": "<example sentence>" }}\n'
+            f'    ]\n'
+            f'  }},\n'
+            f'  "explanation_in_paragraph": {{\n'
+            f'    "vocabulary_1": "explanation of the meaning used in the paragraph (highlight the vocabulary in **bold**)",\n'
+            f'    "vocabulary_2": "explanation of the meaning used in the paragraph (highlight the vocabulary in **bold**)"\n'
+            f'  }}\n'
+            f"}}"
+        )
+
         if req.prompt:
             final_prompt = f"{base_prompt}\nAdditional instruction: {req.prompt}"
         else:
