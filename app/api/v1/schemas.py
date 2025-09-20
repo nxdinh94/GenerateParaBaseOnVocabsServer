@@ -127,3 +127,12 @@ class RenewJWTResponse(BaseModel):
 class LogoutResponse(BaseModel):
     status: bool
     message: str
+
+# === Delete Vocabulary ===
+class DeleteVocabRequest(BaseModel):
+    vocab: str
+
+class DeleteVocabResponse(BaseModel):
+    status: bool
+    message: str
+    deleted_count: int

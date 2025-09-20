@@ -5,11 +5,12 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Header, Response
 from bson import ObjectId
 
-from app.database.crud import get_user_crud, get_input_history_crud, get_saved_paragraph_crud
+from app.database.crud import get_user_crud, get_input_history_crud, get_saved_paragraph_crud, get_learned_vocabs_crud
 from app.database.models import (
     UserCreate, UserResponse, UserUpdate,
     InputHistoryCreate, InputHistoryCreateInternal, InputHistoryResponse,
-    SavedParagraphCreate, SavedParagraphResponse
+    SavedParagraphCreate, SavedParagraphResponse,
+    LearnedVocabsCreate, LearnedVocabsCreateInternal, LearnedVocabsResponse
 )
 
 router = APIRouter(prefix="/db", tags=["Database"])
@@ -101,43 +102,61 @@ async def delete_user(user_id: str):
     
     return {"message": "User deleted successfully"}
 
-# Input History routes
+# Input History routes (now using learned_vocabs collection)
 @router.post("/input-history/", response_model=InputHistoryResponse)
 async def create_input_history(history_data: InputHistoryCreate, response: Response, authorization: Optional[str] = Header(None)):
-    """Create new input history or return existing one if vocabulary already exists"""
+    """Create new input history or return existing one if vocabulary already exists
+    Now saves data to learned_vocabs collection instead of input_history"""
     from app.api.v1.routes import get_current_user
     
     # Get current user from JWT token
     current_user = await get_current_user(authorization)
-    user_id = current_user["user_id"]
+    user_id = current_user.get("user_id") or current_user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail={
+            "error": "invalid_user_data",
+            "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
+        })
     
-    input_history_crud = get_input_history_crud()
+    learned_vocabs_crud = get_learned_vocabs_crud()
     
     # Debug: Log the incoming request
-    print(f"🔍 DEBUG: Checking for duplicate words {history_data.words} for user {user_id}")
+    print(f"🔍 DEBUG: Checking for duplicate vocabs {history_data.words} for user {user_id}")
     
-    # Check if input history with same words already exists for this user
-    existing_history = await input_history_crud.find_by_exact_words(user_id, history_data.words)
+    # Check if learned vocabs with same words already exists for this user
+    existing_vocabs = await learned_vocabs_crud.find_by_exact_vocabs(user_id, history_data.words)
     
-    if existing_history:
-        # Return existing history with 200 OK status
-        print(f"✅ DEBUG: Found existing history with ID {existing_history.id}")
+    if existing_vocabs:
+        # Return existing vocabs as InputHistoryResponse format for backward compatibility
+        print(f"✅ DEBUG: Found existing learned vocabs with ID {existing_vocabs.id}")
         response.status_code = status.HTTP_200_OK
-        return InputHistoryResponse(**existing_history.dict())
+        return InputHistoryResponse(
+            id=existing_vocabs.id,
+            user_id=existing_vocabs.user_id,
+            words=existing_vocabs.vocabs,
+            created_at=existing_vocabs.created_at
+        )
     
     # Debug: Log that we're creating new entry
-    print(f"🆕 DEBUG: No duplicate found, creating new input history")
+    print(f"🆕 DEBUG: No duplicate found, creating new learned vocabs entry")
     
-    # Create history data with user_id from token
-    history_create_data = InputHistoryCreateInternal(
+    # Create learned vocabs data with user_id from token
+    vocabs_create_data = LearnedVocabsCreateInternal(
         user_id=user_id,
-        words=history_data.words
+        vocabs=history_data.words
     )
     
-    # Create new history if it doesn't exist
-    history = await input_history_crud.create_input_history(history_create_data)
+    # Create new learned vocabs entry
+    learned_vocabs = await learned_vocabs_crud.create_learned_vocabs(vocabs_create_data)
     response.status_code = status.HTTP_201_CREATED
-    return InputHistoryResponse(**history.dict())
+    
+    # Return as InputHistoryResponse format for backward compatibility
+    return InputHistoryResponse(
+        id=learned_vocabs.id,
+        user_id=learned_vocabs.user_id,
+        words=learned_vocabs.vocabs,
+        created_at=learned_vocabs.created_at
+    )
 
 @router.get("/input-history/{history_id}", response_model=InputHistoryResponse)
 async def get_input_history(history_id: str):

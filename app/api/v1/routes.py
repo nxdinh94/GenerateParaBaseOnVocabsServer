@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Header
 from app.api.v1 import schemas
 from app.api.v1.database_routes import router as db_router
+from app.services.openai_client import OpenAIClient
 from app.services.gemini_client import GeminiClient
 from app.services.google_auth import google_auth_service
 from app.database.crud import get_user_crud, get_refresh_token_crud
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api/v1", tags=["v1"])
 router.include_router(db_router)
 
 gemini_client = GeminiClient()
+openai_client = OpenAIClient()
 
 # === Google Authentication ===
 @router.post("/auth/google/login", response_model=schemas.GoogleLoginResponse)
@@ -419,11 +421,11 @@ async def logout(current_user: dict = Depends(get_current_user)):
     Requires Bearer token in Authorization header
     """
     try:
-        user_id = current_user.get("user_id")
+        user_id = current_user.get("user_id") or current_user.get("id")
         if not user_id:
             raise HTTPException(status_code=401, detail={
                 "error": "invalid_user_data",
-                "message": "User ID not found in token"
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
             })
         
         refresh_token_crud = get_refresh_token_crud()
@@ -453,7 +455,7 @@ async def logout(current_user: dict = Depends(get_current_user)):
 async def generate_text(req: schemas.GenerateRequest):
     try:
         res_text = await gemini_client.generate_text(req.prompt, req.max_tokens or 256)
-        return schemas.GenerateResponse(result=res_text)
+        return schemas.GenerateResponse(result=res_text, status=True)
     except Exception as e:
         logger.exception("Error calling Gemini")
         raise HTTPException(status_code=500, detail=str(e))
@@ -496,7 +498,7 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
             f"at {req.level} level with a {req.tone} tone and {"beginner" if req.topic == '' else req.topic} topic. The paragraph must include these vocabularies: "
             f"{', '.join(req.vocabularies)}. Make sure to use all the vocabularies at least once."
             f"Highlight the vocabularies in bold in the paragraph."
-            f"Also list all the meaning of this vocabs base on Cambridge, give example for each meaning."
+            f"Also list all the meaning of this vocabs base on Cambridge indeed, give example for each meaning."
             f"Finally, explain the meaning of the vocabularies in the paragraph, which meanings is use in the paragraph."
             f"always return data following json format:"
             f"{
@@ -507,8 +509,6 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
                             {
                                 "phonetic_transcription": "",
                                 "part_of_speech": "",
-                                "synonyms": [""],
-                                "antonyms": [""]
                             },
                             { 
                                 "meaning": "", 
@@ -540,6 +540,7 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
             final_prompt = base_prompt
 
         res_text = await gemini_client.generate_text(final_prompt)
+        # res_text = await gemini_client.generate_text(final_prompt)
         return schemas.ParagraphResponse(result=res_text, status=True)
         
     except HTTPException:
@@ -573,18 +574,18 @@ async def save_paragraph(req: schemas.SaveParagraphRequest, current_user: dict =
             })
             
         from app.database.crud import get_input_history_crud, get_saved_paragraph_crud
-        from app.database.models import InputHistoryCreate, SavedParagraphCreate
+        from app.database.models import InputHistoryCreateInternal, SavedParagraphCreate
         from bson import ObjectId
         
         input_history_crud = get_input_history_crud()
         saved_paragraph_crud = get_saved_paragraph_crud()
         
-        # Get user ID from authenticated user
-        user_id = current_user.get("user_id")
+        # Get user ID from authenticated user (handle both 'user_id' and 'id' fields)
+        user_id = current_user.get("user_id") or current_user.get("id")
         if not user_id:
             raise HTTPException(status_code=401, detail={
                 "error": "invalid_user_data",
-                "message": "User ID not found in token"
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
             })
         
         # Normalize input vocabularies (lowercase and sorted for comparison)
@@ -606,7 +607,7 @@ async def save_paragraph(req: schemas.SaveParagraphRequest, current_user: dict =
             message = "Using existing vocabularies, paragraph saved successfully"
         else:
             # Create new input history
-            history_data = InputHistoryCreate(
+            history_data = InputHistoryCreateInternal(
                 user_id=user_id,
                 words=input_vocabs  # Save normalized vocabs
             )
@@ -657,11 +658,11 @@ async def get_all_paragraphs(limit: int = 100, grouped: bool = True, current_use
         from app.database.crud import get_saved_paragraph_crud
         
         saved_paragraph_crud = get_saved_paragraph_crud()
-        user_id = current_user.get("user_id")
+        user_id = current_user.get("user_id") or current_user.get("id")
         if not user_id:
             raise HTTPException(status_code=401, detail={
                 "error": "invalid_user_data",
-                "message": "User ID not found in token"
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
             })
         
         # Get user's saved paragraphs with input history info
@@ -756,11 +757,11 @@ async def get_paragraphs_by_group(input_history_id: str, current_user: dict = De
         saved_paragraph_crud = get_saved_paragraph_crud()
         input_history_crud = get_input_history_crud()
         
-        user_id = current_user.get("user_id")
+        user_id = current_user.get("user_id") or current_user.get("id")
         if not user_id:
             raise HTTPException(status_code=401, detail={
                 "error": "invalid_user_data",
-                "message": "User ID not found in token"
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
             })
         
         # Verify that the input_history belongs to the current user
@@ -805,62 +806,264 @@ async def get_paragraphs_by_group(input_history_id: str, current_user: dict = De
         }
 
 # === Get all unique vocabularies ===
-@router.get("/unique-vocabs", response_model=schemas.UniqueVocabsResponse)
-async def get_unique_vocabs(current_user: dict = Depends(get_current_user)):
+@router.get("/unique-vocabs")
+async def get_unique_vocabs(sort: str = "newest", current_user: dict = Depends(get_current_user)):
     """
-    Get all unique vocabularies from saved paragraphs
+    Get all learned vocabularies documents from learned_vocabs collection
+    Returns complete documents sorted by date, excluding user_id
+    
+    Args:
+        sort: Sort order - "newest" (default), "oldest", "alphabetical", "frequent"
     """
     try:
-        from app.database.crud import get_input_history_crud
+        from app.database.crud import get_learned_vocabs_crud
         
-        input_history_crud = get_input_history_crud()
-        user_id = current_user.get("user_id")
+        learned_vocabs_crud = get_learned_vocabs_crud()
+        user_id = current_user.get("user_id") or current_user.get("id")
         if not user_id:
             raise HTTPException(status_code=401, detail={
                 "error": "invalid_user_data",
-                "message": "User ID not found in token"
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
             })
         
-        # Get all input histories for the user
-        input_histories = await input_history_crud.get_user_input_history(user_id, limit=1000)
+        # Validate sort parameter
+        valid_sorts = ["newest", "oldest", "alphabetical", "frequent"]
+        if sort not in valid_sorts:
+            raise HTTPException(status_code=400, detail={
+                "error": "invalid_sort_parameter",
+                "message": f"Sort must be one of: {', '.join(valid_sorts)}"
+            })
         
-        # Collect all unique vocabularies
-        all_vocabs = set()
-        vocab_frequency = {}
+        # Get all learned vocabs entries for the user (always get newest first from DB)
+        learned_vocabs_entries = await learned_vocabs_crud.get_user_learned_vocabs(user_id, limit=1000)
         
-        for history in input_histories:
-            for word in history.words:
-                word_lower = word.lower().strip()
-                if word_lower:  # Skip empty words
-                    all_vocabs.add(word_lower)
-                    vocab_frequency[word_lower] = vocab_frequency.get(word_lower, 0) + 1
+        # Format documents for response (exclude user_id, include all fields)
+        documents = []
+        for entry in learned_vocabs_entries:
+            document = {
+                "id": str(entry.id),
+                "vocabs": entry.vocabs,
+                "usage_count": getattr(entry, 'usage_count', 1),  # Default to 1 if field doesn't exist
+                "created_at": entry.created_at.isoformat() if entry.created_at else None,
+                "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+                "deleted_at": entry.deleted_at.isoformat() if entry.deleted_at else None,
+                "is_deleted": entry.is_deleted
+            }
+            documents.append(document)
         
-        # Convert to sorted list
-        unique_vocabs = sorted(list(all_vocabs))
+        # Apply sorting based on sort parameter
+        if sort == "newest":
+            # Sort by created_at (newest first) - handle None values properly
+            documents.sort(key=lambda x: x["created_at"] or "1900-01-01T00:00:00", reverse=True)
+        elif sort == "oldest":
+            # Sort by created_at (oldest first) - handle None values properly
+            documents.sort(key=lambda x: x["created_at"] or "1900-01-01T00:00:00", reverse=False)
+        elif sort == "alphabetical":
+            # Sort by first vocabulary word alphabetically
+            documents.sort(key=lambda x: x["vocabs"][0].lower() if x["vocabs"] else "zzz")
+        elif sort == "frequent":
+            # Sort by usage_count (most frequent first), then by created_at (newest first) as tiebreaker
+            documents.sort(key=lambda x: (x["usage_count"], x["created_at"] or "1900-01-01T00:00:00"), reverse=True)
         
-        # Create frequency list (most frequent first)
-        frequency_list = [
-            schemas.VocabFrequency(vocab=word, frequency=count) 
-            for word, count in sorted(vocab_frequency.items(), key=lambda x: x[1], reverse=True)
-        ]
-        
-        return schemas.UniqueVocabsResponse(
-            status=True,
-            total_unique=len(unique_vocabs),
-            unique_vocabs=unique_vocabs,
-            frequency_data=frequency_list,
-            message=f"Found {len(unique_vocabs)} unique vocabularies"
-        )
+        return {
+            "status": True,
+            "total_documents": len(documents),
+            "documents": documents,
+            "sort": documents,  # Put the sorted data array in the sort field
+            "sort_method": sort,  # Keep the sort method in a separate field
+            "message": f"Found {len(documents)} vocabulary documents sorted by {sort}"
+        }
         
     except Exception as e:
-        logger.exception("Error getting unique vocabularies")
-        return schemas.UniqueVocabsResponse(
-            status=False,
-            total_unique=0,
-            unique_vocabs=[],
-            frequency_data=[],
-            message=f"Failed to get vocabularies: {str(e)}"
+        logger.exception("Error getting vocabulary documents from learned_vocabs")
+        return {
+            "status": False,
+            "total_documents": 0,
+            "documents": [],
+            "sort": [],  # Empty array for consistency
+            "sort_method": sort,
+            "message": f"Failed to get vocabulary documents: {str(e)}"
+        }
+
+# === Create learned vocabularies ===
+@router.post("/learned-vocabs")
+async def create_learned_vocabs(req: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Create new learned vocabularies entry
+    Schema: {"vocabs": ["word1", "word2", "word3"]}
+    Requires Bearer token authorization
+    """
+    try:
+        # Validate request schema
+        if "vocabs" not in req:
+            raise HTTPException(status_code=400, detail={
+                "error": "missing_vocabs",
+                "message": "Field 'vocabs' is required"
+            })
+        
+        vocabs = req.get("vocabs", [])
+        
+        if not isinstance(vocabs, list):
+            raise HTTPException(status_code=400, detail={
+                "error": "invalid_vocabs_type",
+                "message": "Field 'vocabs' must be an array"
+            })
+        
+        if len(vocabs) == 0:
+            raise HTTPException(status_code=400, detail={
+                "error": "empty_vocabs",
+                "message": "At least one vocabulary is required"
+            })
+        
+        # Clean and validate vocabularies
+        cleaned_vocabs = []
+        for vocab in vocabs:
+            if isinstance(vocab, str) and vocab.strip():
+                cleaned_vocabs.append(vocab.strip())
+        
+        if len(cleaned_vocabs) == 0:
+            raise HTTPException(status_code=400, detail={
+                "error": "no_valid_vocabs",
+                "message": "No valid vocabularies provided"
+            })
+        
+        from app.database.crud import get_learned_vocabs_crud
+        from app.database.models import LearnedVocabsCreateInternal
+        
+        learned_vocabs_crud = get_learned_vocabs_crud()
+        user_id = current_user.get("user_id") or current_user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
+            })
+        
+        # Check if these exact vocabularies already exist
+        existing_vocabs = await learned_vocabs_crud.find_by_exact_vocabs(user_id, cleaned_vocabs)
+        
+        if existing_vocabs:
+            # Increment usage count for existing entry
+            updated_vocabs = await learned_vocabs_crud.increment_usage_count(str(existing_vocabs.id))
+            logger.info(f"Incremented usage count for learned vocabs ID: {existing_vocabs.id}, new count: {updated_vocabs.usage_count if updated_vocabs else 'unknown'}")
+            
+            # Return updated entry
+            return {
+                "status": True,
+                "message": "Vocabularies already exist, usage count incremented",
+                "data": {
+                    "id": str(updated_vocabs.id if updated_vocabs else existing_vocabs.id),
+                    "vocabs": updated_vocabs.vocabs if updated_vocabs else existing_vocabs.vocabs,
+                    "usage_count": updated_vocabs.usage_count if updated_vocabs else getattr(existing_vocabs, 'usage_count', 1),
+                    "created_at": updated_vocabs.created_at.isoformat() if updated_vocabs and updated_vocabs.created_at else existing_vocabs.created_at.isoformat() if existing_vocabs.created_at else None,
+                    "updated_at": updated_vocabs.updated_at.isoformat() if updated_vocabs and updated_vocabs.updated_at else existing_vocabs.updated_at.isoformat() if existing_vocabs.updated_at else None,
+                    "deleted_at": updated_vocabs.deleted_at.isoformat() if updated_vocabs and updated_vocabs.deleted_at else existing_vocabs.deleted_at.isoformat() if existing_vocabs.deleted_at else None,
+                    "is_deleted": updated_vocabs.is_deleted if updated_vocabs else existing_vocabs.is_deleted
+                },
+                "is_new": False,
+                "usage_incremented": True
+            }
+        
+        # Create new learned vocabs entry
+        vocabs_create_data = LearnedVocabsCreateInternal(
+            user_id=user_id,
+            vocabs=cleaned_vocabs
         )
+        
+        learned_vocabs = await learned_vocabs_crud.create_learned_vocabs(vocabs_create_data)
+        logger.info(f"Created new learned vocabs with ID: {learned_vocabs.id}")
+        
+        return {
+            "status": True,
+            "message": "Learned vocabularies created successfully",
+            "data": {
+                "id": str(learned_vocabs.id),
+                "vocabs": learned_vocabs.vocabs,
+                "usage_count": getattr(learned_vocabs, 'usage_count', 1),
+                "created_at": learned_vocabs.created_at.isoformat() if learned_vocabs.created_at else None,
+                "updated_at": learned_vocabs.updated_at.isoformat() if learned_vocabs.updated_at else None,
+                "deleted_at": learned_vocabs.deleted_at.isoformat() if learned_vocabs.deleted_at else None,
+                "is_deleted": learned_vocabs.is_deleted
+            },
+            "is_new": True,
+            "usage_incremented": False
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error creating learned vocabularies")
+        raise HTTPException(status_code=500, detail={
+            "error": "creation_failed",
+            "message": "Failed to create learned vocabularies",
+            "details": str(e)
+        })
+
+# === Delete vocabulary from learned vocabs ===
+@router.delete("/learned-vocabs")
+async def delete_vocabulary(req: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Delete all learned vocabulary entries containing the specified word
+    Schema: {"vocab": "word_to_delete"}
+    Requires Bearer token authorization
+    """
+    try:
+        # Validate request schema
+        if "vocab" not in req:
+            raise HTTPException(status_code=400, detail={
+                "error": "missing_vocab",
+                "message": "Field 'vocab' is required"
+            })
+        
+        vocab = req.get("vocab", "")
+        
+        if not isinstance(vocab, str):
+            raise HTTPException(status_code=400, detail={
+                "error": "invalid_vocab_type",
+                "message": "Field 'vocab' must be a string"
+            })
+        
+        if not vocab.strip():
+            raise HTTPException(status_code=400, detail={
+                "error": "empty_vocab",
+                "message": "Vocabulary word cannot be empty"
+            })
+        
+        from app.database.crud import get_learned_vocabs_crud
+        
+        learned_vocabs_crud = get_learned_vocabs_crud()
+        user_id = current_user.get("user_id") or current_user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
+            })
+        
+        # Delete all learned vocabs entries containing the specified word
+        deleted_count = await learned_vocabs_crud.delete_vocabs_containing_word(user_id, vocab.strip())
+        
+        if deleted_count > 0:
+            logger.info(f"Deleted {deleted_count} learned vocabs entries containing word '{vocab}' for user {user_id}")
+            return {
+                "status": True,
+                "message": f"Successfully deleted {deleted_count} vocabulary entries containing '{vocab.strip()}'",
+                "deleted_count": deleted_count
+            }
+        else:
+            return {
+                "status": False,
+                "message": f"No vocabulary entries found containing '{vocab.strip()}'",
+                "deleted_count": 0
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error deleting vocabulary")
+        raise HTTPException(status_code=500, detail={
+            "error": "deletion_failed",
+            "message": "Failed to delete vocabulary",
+            "details": str(e)
+        })
 
 # === Simple test endpoint ===
 @router.get("/test-data")

@@ -14,7 +14,8 @@ from app.database.models import (
     UserCreate, GoogleUserCreate, UserInDB, UserUpdate, UserResponse,
     RefreshTokenCreate, RefreshTokenInDB, RefreshTokenResponse,
     InputHistoryCreate, InputHistoryCreateInternal, InputHistoryInDB, InputHistoryResponse,
-    SavedParagraphCreate, SavedParagraphInDB, SavedParagraphResponse
+    SavedParagraphCreate, SavedParagraphInDB, SavedParagraphResponse,
+    LearnedVocabsCreate, LearnedVocabsCreateInternal, LearnedVocabsInDB, LearnedVocabsResponse
 )
 
 class UserCRUD:
@@ -328,6 +329,172 @@ class SavedParagraphCRUD:
         result = await self.collection.delete_one({"_id": ObjectId(paragraph_id)})
         return result.deleted_count > 0
 
+class LearnedVocabsCRUD:
+    """CRUD operations for Learned Vocabs collection"""
+    
+    @property
+    def collection(self) -> AsyncIOMotorCollection:
+        return get_collection("learned_vocabs")
+    
+    async def create_learned_vocabs(self, vocabs_data: LearnedVocabsCreateInternal) -> LearnedVocabsInDB:
+        """Create new learned vocabs entry"""
+        vocabs_dict = vocabs_data.dict()
+        # Convert user_id string to ObjectId for storage
+        vocabs_dict['user_id'] = ObjectId(vocabs_dict['user_id'])
+        current_time = datetime.utcnow()
+        vocabs_dict['created_at'] = current_time
+        vocabs_dict['updated_at'] = current_time
+        vocabs_dict['is_deleted'] = False
+        vocabs_dict['deleted_at'] = None
+        vocabs_dict['usage_count'] = 1  # Initialize usage count
+        
+        # Insert to database
+        result = await self.collection.insert_one(vocabs_dict)
+        
+        # Return created entry
+        created_vocabs = await self.collection.find_one({"_id": result.inserted_id})
+        return LearnedVocabsInDB(**created_vocabs)
+    
+    async def get_learned_vocabs_by_id(self, vocabs_id: str) -> Optional[LearnedVocabsInDB]:
+        """Get learned vocabs by ID"""
+        vocabs = await self.collection.find_one({"_id": ObjectId(vocabs_id), "is_deleted": False})
+        return LearnedVocabsInDB(**vocabs) if vocabs else None
+    
+    async def get_user_learned_vocabs(self, user_id: str, limit: int = 50) -> List[LearnedVocabsInDB]:
+        """Get learned vocabs for a user, sorted by created_at descending (newest first)"""
+        cursor = self.collection.find({"user_id": ObjectId(user_id), "is_deleted": False}).sort("created_at", -1).limit(limit)
+        vocabs_list = []
+        async for vocabs in cursor:
+            vocabs_list.append(LearnedVocabsInDB(**vocabs))
+        return vocabs_list
+    
+    async def find_by_exact_vocabs(self, user_id: str, vocabs: List[str]) -> Optional[LearnedVocabsInDB]:
+        """Find learned vocabs by exact vocab match for a user"""
+        # Normalize and sort vocabs for consistent comparison
+        def normalize_vocabs(vocab_list):
+            # Filter out empty/whitespace-only vocabs, convert to lowercase, strip, and sort
+            normalized = []
+            for vocab in vocab_list:
+                if isinstance(vocab, str):
+                    cleaned = vocab.strip().lower()
+                    if cleaned:  # Only add non-empty vocabs
+                        normalized.append(cleaned)
+            return sorted(normalized)
+        
+        target_vocabs = normalize_vocabs(vocabs)
+        print(f"🔍 DEBUG: Looking for normalized vocabs: {target_vocabs}")
+        
+        # Don't search if no valid vocabs provided
+        if not target_vocabs:
+            print("⚠️ DEBUG: No valid vocabs provided, returning None")
+            return None
+        
+        # Find all learned vocabs for the user
+        cursor = self.collection.find({"user_id": ObjectId(user_id), "is_deleted": False})
+        
+        count = 0
+        async for vocabs_entry in cursor:
+            count += 1
+            # Get the vocabs from the document
+            entry_vocabs = vocabs_entry.get('vocabs', [])
+            existing_vocabs = normalize_vocabs(entry_vocabs)
+            print(f"🔍 DEBUG: Comparing with existing #{count}: {existing_vocabs}")
+            
+            # Check if vocabs match exactly
+            if existing_vocabs == target_vocabs:
+                print(f"✅ DEBUG: Match found at record #{count}!")
+                return LearnedVocabsInDB(**vocabs_entry)
+        
+        print(f"❌ DEBUG: No match found among {count} records")
+        return None
+    
+    async def get_all_user_vocabs(self, user_id: str) -> List[str]:
+        """Get all unique vocabs learned by a user"""
+        cursor = self.collection.find({"user_id": ObjectId(user_id), "is_deleted": False})
+        
+        all_vocabs = set()
+        async for vocabs_entry in cursor:
+            for vocab in vocabs_entry.get('vocabs', []):
+                cleaned_vocab = vocab.strip().lower()
+                if cleaned_vocab:
+                    all_vocabs.add(cleaned_vocab)
+        
+        return sorted(list(all_vocabs))
+    
+    async def update_learned_vocabs(self, vocabs_id: str, new_vocabs: List[str]) -> Optional[LearnedVocabsInDB]:
+        """Update learned vocabs entry"""
+        update_dict = {
+            "vocabs": new_vocabs,
+            "updated_at": datetime.utcnow()
+        }
+        
+        await self.collection.update_one(
+            {"_id": ObjectId(vocabs_id), "is_deleted": False}, 
+            {"$set": update_dict}
+        )
+        
+        return await self.get_learned_vocabs_by_id(vocabs_id)
+    
+    async def increment_usage_count(self, vocabs_id: str) -> Optional[LearnedVocabsInDB]:
+        """Increment usage count for learned vocabs entry"""
+        update_dict = {
+            "$inc": {"usage_count": 1},  # Increment usage_count by 1
+            "$set": {"updated_at": datetime.utcnow()}
+        }
+        
+        await self.collection.update_one(
+            {"_id": ObjectId(vocabs_id), "is_deleted": False}, 
+            update_dict
+        )
+        
+        return await self.get_learned_vocabs_by_id(vocabs_id)
+    
+    async def soft_delete_learned_vocabs(self, vocabs_id: str) -> bool:
+        """Soft delete learned vocabs entry"""
+        update_dict = {
+            "is_deleted": True,
+            "deleted_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        result = await self.collection.update_one(
+            {"_id": ObjectId(vocabs_id), "is_deleted": False}, 
+            {"$set": update_dict}
+        )
+        return result.modified_count > 0
+    
+    async def delete_learned_vocabs(self, vocabs_id: str) -> bool:
+        """Hard delete learned vocabs entry"""
+        result = await self.collection.delete_one({"_id": ObjectId(vocabs_id)})
+        return result.deleted_count > 0
+    
+    async def delete_vocabs_containing_word(self, user_id: str, word: str) -> int:
+        """Delete all learned vocabs entries containing the specified word for a user"""
+        # Normalize the word for comparison
+        normalized_word = word.strip().lower()
+        
+        if not normalized_word:
+            return 0
+        
+        # Find all user's learned vocabs entries that contain the word
+        cursor = self.collection.find({"user_id": ObjectId(user_id), "is_deleted": False})
+        
+        entries_to_delete = []
+        async for vocabs_entry in cursor:
+            entry_vocabs = vocabs_entry.get('vocabs', [])
+            # Check if any vocab in the entry matches the target word
+            for vocab in entry_vocabs:
+                if isinstance(vocab, str) and vocab.strip().lower() == normalized_word:
+                    entries_to_delete.append(vocabs_entry['_id'])
+                    break  # Found the word in this entry, no need to check other vocabs
+        
+        # Delete all matching entries
+        if entries_to_delete:
+            result = await self.collection.delete_many({"_id": {"$in": entries_to_delete}})
+            return result.deleted_count
+        
+        return 0
+
 # Create CRUD instances (lazy initialization)
 def get_user_crud():
     return UserCRUD()
@@ -340,3 +507,6 @@ def get_input_history_crud():
 
 def get_saved_paragraph_crud():
     return SavedParagraphCRUD()
+
+def get_learned_vocabs_crud():
+    return LearnedVocabsCRUD()

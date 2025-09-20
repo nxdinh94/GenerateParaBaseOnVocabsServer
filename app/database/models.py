@@ -251,3 +251,67 @@ class SavedParagraphResponse(BaseModel):
     model_config = {
         "populate_by_name": True,
     }
+
+# Learned Vocabs Models
+class LearnedVocabsCreate(BaseModel):
+    vocabs: List[str] = Field(..., min_length=1)
+
+class LearnedVocabsCreateInternal(BaseModel):
+    user_id: PyObjectId
+    vocabs: List[str] = Field(..., min_length=1)
+    
+    @field_validator('user_id', mode='before')
+    @classmethod
+    def validate_user_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid user_id ObjectId")
+
+class LearnedVocabsInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    user_id: PyObjectId
+    vocabs: List[str]
+    usage_count: int = Field(default=1)  # Track how many times this vocab set is used
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    deleted_at: Optional[datetime] = None
+    is_deleted: bool = Field(default=False)
+    
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid ObjectId")
+    
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+    }
+
+class LearnedVocabsResponse(BaseModel):
+    id: PyObjectId = Field(alias="_id")
+    user_id: PyObjectId
+    vocabs: List[str]
+    usage_count: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+    is_deleted: bool
+    
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+    
+    model_config = {
+        "populate_by_name": True,
+    }
