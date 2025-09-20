@@ -1,7 +1,7 @@
 # Frequent Sort Feature Documentation
 
 ## Overview
-The `/unique-vocabs` API has been enhanced with a new "frequent" sort option that sorts vocabulary documents by usage frequency. This allows users to see their most frequently used vocabulary sets first.
+The `/vocabs_base_on_category` API has been enhanced with a new "frequent" sort option that sorts vocabulary documents by usage frequency. This allows users to see their most frequently used vocabulary sets first.
 
 ## New Features
 
@@ -17,11 +17,11 @@ The `/unique-vocabs` API has been enhanced with a new "frequent" sort option tha
 
 ## API Changes
 
-### GET /unique-vocabs
+### GET /vocabs_base_on_category
 
 #### New Sort Option
 ```
-GET /api/v1/unique-vocabs?sort=frequent
+GET /api/v1/vocabs_base_on_category?sort=frequent
 ```
 
 #### Updated Sort Options
@@ -107,7 +107,7 @@ Added new field:
 ### 1. Get Most Frequently Used Vocabularies
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "http://localhost:8000/api/v1/unique-vocabs?sort=frequent"
+  "http://localhost:8000/api/v1/vocabs_base_on_category?sort=frequent"
 ```
 
 ### 2. Create/Use Vocabularies (Auto-increment usage)
@@ -122,7 +122,7 @@ curl -X POST \
 ### 3. JavaScript Usage
 ```javascript
 // Get most frequently used vocabularies
-const response = await fetch('/api/v1/unique-vocabs?sort=frequent', {
+const response = await fetch('/api/v1/vocabs_base_on_category?sort=frequent', {
   headers: {
     'Authorization': `Bearer ${jwtToken}`
   }

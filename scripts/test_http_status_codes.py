@@ -225,7 +225,7 @@ async def test_successful_requests():
             },
             {
                 "name": "Get Unique Vocabs",
-                "url": f"{BASE_URL}/unique-vocabs",
+                "url": f"{BASE_URL}/vocabs_base_on_category",
                 "method": "GET"
             }
         ]

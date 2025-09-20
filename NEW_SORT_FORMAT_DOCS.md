@@ -1,7 +1,7 @@
 # Updated API Response Format - Sort Field Contains Data Array
 
 ## Overview
-The `/unique-vocabs` API endpoint has been updated with a new response format where the `sort` field now contains the actual sorted data array instead of just the sort method name.
+The `/vocabs_base_on_category` API endpoint has been updated with a new response format where the `sort` field now contains the actual sorted data array instead of just the sort method name.
 
 ## New Response Structure
 
@@ -117,7 +117,7 @@ The `sort` field contains the same data as the `documents` field, but explicitly
 
 ### JavaScript Example
 ```javascript
-const response = await fetch('/api/v1/unique-vocabs', {
+const response = await fetch('/api/v1/vocabs_base_on_category', {
   headers: {
     'Authorization': `Bearer ${jwtToken}`
   }
@@ -144,7 +144,7 @@ if (data.status) {
 import requests
 
 response = requests.get(
-    'http://localhost:8000/api/v1/unique-vocabs',
+    'http://localhost:8000/api/v1/vocabs_base_on_category',
     headers={'Authorization': f'Bearer {jwt_token}'}
 )
 
@@ -198,10 +198,10 @@ const sortedData = data.sort;         // This is now the data array
 The new format can be tested using:
 ```bash
 # Test with authentication
-curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/unique-vocabs"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/vocabs_base_on_category"
 
 # Test with specific sort
-curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/unique-vocabs?sort=oldest"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/vocabs_base_on_category?sort=oldest"
 ```
 
 ## Summary

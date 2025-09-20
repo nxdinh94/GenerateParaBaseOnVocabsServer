@@ -59,7 +59,7 @@ async def test_other_apis():
     
     apis_to_test = [
         "/all-paragraphs",
-        "/unique-vocabs"
+        "/vocabs_base_on_category"
     ]
     
     print("\n🧪 Testing other authenticated APIs...")

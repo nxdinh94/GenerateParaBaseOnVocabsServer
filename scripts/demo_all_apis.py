@@ -74,7 +74,7 @@ def test_unique_vocabs():
     print_section("UNIQUE VOCABULARIES API")
     
     try:
-        response = requests.get("http://127.0.0.1:8000/api/v1/unique-vocabs")
+        response = requests.get("http://127.0.0.1:8000/api/v1/vocabs_base_on_category")
         
         if response.status_code == 200:
             result = response.json()
@@ -156,7 +156,7 @@ def main():
         print(f"   • POST /save-paragraph - Save vocabs + paragraph")
         print(f"   • GET  /saved-paragraphs - Get all saved data")
         print(f"   • GET  /all-paragraphs - Same as saved-paragraphs")
-        print(f"   • GET  /unique-vocabs - Get unique vocabularies")
+        print(f"   • GET  /vocabs_base_on_category - Get unique vocabularies")
         print(f"   • GET  /test-data - Simple test endpoint")
     
     print(f"\n{'='*60}")

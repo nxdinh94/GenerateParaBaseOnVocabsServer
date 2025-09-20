@@ -45,12 +45,12 @@ def test_unique_vocabs_api():
     print("\n🔧 Testing Unique Vocabs API")
     print("=" * 50)
     
-    print(f"🌐 Endpoint: {BASE_URL}/api/v1/unique-vocabs")
+    print(f"🌐 Endpoint: {BASE_URL}/api/v1/vocabs_base_on_category")
     
     print("\n🧪 Testing without authentication (should get 401):")
     try:
         response = requests.get(
-            f"{BASE_URL}/api/v1/unique-vocabs",
+            f"{BASE_URL}/api/v1/vocabs_base_on_category",
             headers={"Content-Type": "application/json"}
         )
         print(f"Status Code: {response.status_code}")

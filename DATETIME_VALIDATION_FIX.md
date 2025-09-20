@@ -76,7 +76,7 @@ async def create_learned_vocabs(self, vocabs_data: LearnedVocabsCreateInternal) 
 
 ## 📋 **Affected Endpoints**
 - `POST /api/v1/learned-vocabs` - Fixed creation validation
-- `GET /api/v1/unique-vocabs` - Fixed retrieval validation
+- `GET /api/v1/vocabs_base_on_category` - Fixed retrieval validation
 - `POST /api/v1/db/input-history/` - Works with learned_vocabs backend
 
 ## 🚀 **Result**

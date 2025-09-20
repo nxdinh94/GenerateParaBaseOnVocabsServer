@@ -35,13 +35,13 @@ def test_input_history_with_learned_vocabs():
 def test_unique_vocabs_endpoint():
     """Test the unique-vocabs endpoint now using learned_vocabs collection"""
     print("\n" + "=" * 60)
-    print("Testing GET /api/v1/unique-vocabs (now using learned_vocabs)")
+    print("Testing GET /api/v1/vocabs_base_on_category (now using learned_vocabs)")
     print("=" * 60)
     
     print("\n1. Testing without authentication (should fail):")
     try:
         response = requests.get(
-            f"{BASE_URL}/api/v1/unique-vocabs",
+            f"{BASE_URL}/api/v1/vocabs_base_on_category",
             headers={"Content-Type": "application/json"}
         )
         print(f"Status Code: {response.status_code}")
@@ -63,7 +63,7 @@ def test_api_endpoints():
     endpoints = [
         "/api/v1/test-data",
         "/api/v1/db/input-history/",
-        "/api/v1/unique-vocabs"
+        "/api/v1/vocabs_base_on_category"
     ]
     
     for endpoint in endpoints:
@@ -90,7 +90,7 @@ def main():
     print("📝 Summary of Changes:")
     print("   - Created new 'learned_vocabs' collection")
     print("   - POST /input-history/ now saves to learned_vocabs")
-    print("   - GET /unique-vocabs now reads from learned_vocabs")
+    print("   - GET /vocabs_base_on_category now reads from learned_vocabs")
     print("   - Maintains backward compatibility for response format")
     
     test_api_endpoints()

@@ -50,7 +50,7 @@ Created comprehensive CRUD class `LearnedVocabsCRUD` with methods:
 - Still performs duplicate detection to avoid saving identical vocabulary sets
 - Uses JWT authentication to get user_id
 
-#### B. GET `/api/v1/unique-vocabs` (`app/api/v1/routes.py`)
+#### B. GET `/api/v1/vocabs_base_on_category` (`app/api/v1/routes.py`)
 **Before**: Retrieved unique vocabulary words from `input_history` collection
 **After**: Retrieves complete documents from `learned_vocabs` collection
 
@@ -92,7 +92,7 @@ Created comprehensive CRUD class `LearnedVocabsCRUD` with methods:
 
 ### 1. Backward Compatibility
 - **POST `/input-history/`**: Maintains the same request/response formats
-- **GET `/unique-vocabs`**: **⚠️ BREAKING CHANGE** - New response format returns complete documents instead of unique words/frequency data
+- **GET `/vocabs_base_on_category`**: **⚠️ BREAKING CHANGE** - New response format returns complete documents instead of unique words/frequency data
 - Authentication and authorization remain unchanged
 - POST endpoint clients will continue to work without changes
 
@@ -128,7 +128,7 @@ POST /api/v1/db/input-history/
     "words": ["hello", "world", "python"]
 }
 
-GET /api/v1/unique-vocabs
+GET /api/v1/vocabs_base_on_category
 Authorization: Bearer <your_jwt_token>
 ```
 
@@ -157,7 +157,7 @@ users ←------ learned_vocabs
 
 Update your API documentation to reflect:
 - POST `/input-history/` now uses `learned_vocabs` collection
-- GET `/unique-vocabs` now sources from `learned_vocabs` collection
+- GET `/vocabs_base_on_category` now sources from `learned_vocabs` collection
 - New collection schema and features available
 
 ## ✅ Implementation Status
@@ -165,7 +165,7 @@ Update your API documentation to reflect:
 - [x] Create `learned_vocabs` database models
 - [x] Implement CRUD operations
 - [x] Update POST `/input-history/` endpoint
-- [x] Update GET `/unique-vocabs` endpoint
+- [x] Update GET `/vocabs_base_on_category` endpoint
 - [x] Maintain backward compatibility
 - [x] Create test scripts
 - [ ] Production deployment testing

@@ -129,7 +129,7 @@ curl -X POST http://localhost:8001/api/v1/learned-vocabs \
   -d '{"vocabs": ["react", "hooks", "context"]}'
 
 # 2. Get all vocabulary documents
-curl -X GET http://localhost:8001/api/v1/unique-vocabs \
+curl -X GET http://localhost:8001/api/v1/vocabs_base_on_category \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
 # 3. Also works with existing input-history endpoint
@@ -146,4 +146,4 @@ curl -X POST http://localhost:8001/api/v1/db/input-history/ \
 - ✅ **Normalization**: Case-insensitive comparison for duplicates
 - ✅ **Authentication**: Requires valid JWT Bearer token
 - ✅ **Validation**: Comprehensive input validation with clear error messages
-- ✅ **Integration**: Works seamlessly with existing `/unique-vocabs` endpoint
+- ✅ **Integration**: Works seamlessly with existing `/vocabs_base_on_category` endpoint

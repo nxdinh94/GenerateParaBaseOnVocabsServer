@@ -150,7 +150,7 @@ def show_endpoint_requirements():
             "description": "Save paragraph with vocabularies"
         },
         {
-            "endpoint": "GET /unique-vocabs",
+            "endpoint": "GET /vocabs_base_on_category",
             "auth_required": True,
             "description": "Get learned vocabularies with sorting"
         },

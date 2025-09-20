@@ -493,8 +493,9 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
         
         paragraphLength = req.length if req.length and req.length > 0 else 1
         print(paragraphLength)
+        print(paragraphLength)
         base_prompt = (
-            f"Write only one {"sentence" if paragraphLength == 1 else "paragraph with {paragraphLength} in length"} in {req.language} "
+            f"Write only one meaningful {"sentence" if paragraphLength == 1 else "paragraph with {paragraphLength} words"} in {req.language} "
             f"at {req.level} level with a {req.tone} tone and {"beginner" if req.topic == '' else req.topic} topic. The paragraph must include these vocabularies: "
             f"{', '.join(req.vocabularies)}. Make sure to use all the vocabularies at least once."
             f"Highlight the vocabularies in bold in the paragraph."
@@ -806,7 +807,7 @@ async def get_paragraphs_by_group(input_history_id: str, current_user: dict = De
         }
 
 # === Get all unique vocabularies ===
-@router.get("/unique-vocabs")
+@router.get("/vocabs_base_on_category")
 async def get_unique_vocabs(sort: str = "newest", current_user: dict = Depends(get_current_user)):
     """
     Get all learned vocabularies documents from learned_vocabs collection

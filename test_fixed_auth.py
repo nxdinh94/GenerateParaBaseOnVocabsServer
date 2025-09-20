@@ -64,7 +64,7 @@ def show_all_fixed_endpoints():
         "POST /auth/logout - Logout and delete refresh tokens", 
         "GET /all-paragraphs - Get all saved paragraphs",
         "GET /paragraphs-by-group/{id} - Get paragraphs by vocabulary group",
-        "GET /unique-vocabs - Get learned vocabularies with sorting",
+        "GET /vocabs_base_on_category - Get learned vocabularies with sorting",
         "POST /learned-vocabs - Create/update learned vocabularies",
         "POST /check-duplicate-vocabs - Check for duplicate vocabularies (database_routes.py)"
     ]

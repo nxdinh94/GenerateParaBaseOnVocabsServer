@@ -103,7 +103,7 @@ def show_database_state():
     
     try:
         # Get unique vocabs
-        response1 = requests.get("http://127.0.0.1:8000/api/v1/unique-vocabs")
+        response1 = requests.get("http://127.0.0.1:8000/api/v1/vocabs_base_on_category")
         result1 = response1.json()
         
         # Get all paragraphs

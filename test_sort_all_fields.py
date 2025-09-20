@@ -17,22 +17,22 @@ def test_sort_all_fields():
     test_cases = [
         {
             "name": "Default Sort (should be newest)",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category",
             "expected_sort": "newest"
         },
         {
             "name": "Explicit Newest Sort",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=newest",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=newest",
             "expected_sort": "newest"
         },
         {
             "name": "Oldest Sort",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=oldest", 
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=oldest", 
             "expected_sort": "oldest"
         },
         {
             "name": "Alphabetical Sort",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=alphabetical",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=alphabetical",
             "expected_sort": "alphabetical"
         }
     ]

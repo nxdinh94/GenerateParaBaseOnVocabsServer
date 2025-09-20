@@ -13,7 +13,7 @@ def test_unique_vocabs_sorting():
     print("🔧 Testing Unique Vocabs API with Sort Parameter")
     print("=" * 60)
     
-    print("📋 API Endpoint: GET /api/v1/unique-vocabs")
+    print("📋 API Endpoint: GET /api/v1/vocabs_base_on_category")
     print("🔑 New Parameter: sort (optional)")
     print("✅ Valid sort values: 'newest', 'oldest', 'alphabetical'")
     print("🎯 Default: 'newest' (newest first)")
@@ -22,27 +22,27 @@ def test_unique_vocabs_sorting():
     sort_options = [
         {
             "name": "Default (newest first)",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category",
             "description": "No sort parameter - defaults to newest"
         },
         {
             "name": "Newest first",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=newest",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=newest",
             "description": "Explicitly sort by newest first"
         },
         {
             "name": "Oldest first", 
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=oldest",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=oldest",
             "description": "Sort by oldest first"
         },
         {
             "name": "Alphabetical",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=alphabetical",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=alphabetical",
             "description": "Sort by first vocabulary word alphabetically"
         },
         {
             "name": "Invalid sort",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=invalid",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=invalid",
             "description": "Should return 400 error"
         }
     ]
@@ -132,19 +132,19 @@ def show_usage_examples():
     examples = [
         {
             "description": "Get newest documents first (default)",
-            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/unique-vocabs'"
+            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/vocabs_base_on_category'"
         },
         {
             "description": "Get newest documents first (explicit)",
-            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/unique-vocabs?sort=newest'"
+            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/vocabs_base_on_category?sort=newest'"
         },
         {
             "description": "Get oldest documents first",
-            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/unique-vocabs?sort=oldest'"
+            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/vocabs_base_on_category?sort=oldest'"
         },
         {
             "description": "Get alphabetically sorted documents", 
-            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/unique-vocabs?sort=alphabetical'"
+            "curl": f"curl -H 'Authorization: Bearer <token>' '{BASE_URL}/api/v1/vocabs_base_on_category?sort=alphabetical'"
         }
     ]
     
@@ -162,7 +162,7 @@ def main():
     
     print("\n" + "=" * 60)
     print("✅ Testing Summary:")
-    print("🆕 Added 'sort' query parameter to /unique-vocabs")
+    print("🆕 Added 'sort' query parameter to /vocabs_base_on_category")
     print("📊 Three sort options: newest, oldest, alphabetical")
     print("🎯 Default behavior: newest first")
     print("✨ Includes sort value in response")

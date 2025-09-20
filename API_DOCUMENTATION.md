@@ -126,7 +126,7 @@ Retrieve all saved paragraphs with their vocabularies. Both endpoints return ide
 - 💡 Simplified data structure (paragraphs as strings)
 
 ### 3. Get Unique Vocabularies
-**GET** `/api/v1/unique-vocabs`
+**GET** `/api/v1/vocabs_base_on_category`
 
 Retrieve all unique vocabularies from saved paragraphs with frequency data.
 

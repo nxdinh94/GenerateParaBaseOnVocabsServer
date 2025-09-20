@@ -16,27 +16,27 @@ def test_frequent_sorting():
     test_cases = [
         {
             "name": "Default Sort (newest first)",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category",
             "expected_sort_method": "newest"
         },
         {
             "name": "Frequent Sort (most used first)",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=frequent",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=frequent",
             "expected_sort_method": "frequent"
         },
         {
             "name": "Newest Sort",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=newest",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=newest",
             "expected_sort_method": "newest"
         },
         {
             "name": "Oldest Sort",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=oldest", 
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=oldest", 
             "expected_sort_method": "oldest"
         },
         {
             "name": "Alphabetical Sort",
-            "url": f"{BASE_URL}/api/v1/unique-vocabs?sort=alphabetical",
+            "url": f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=alphabetical",
             "expected_sort_method": "alphabetical"
         }
     ]
@@ -254,7 +254,7 @@ def show_usage_examples():
     examples = [
         {
             "description": "Get most frequently used vocabularies",
-            "curl": f"""curl -H "Authorization: Bearer <token>" "{BASE_URL}/api/v1/unique-vocabs?sort=frequent\""""
+            "curl": f"""curl -H "Authorization: Bearer <token>" "{BASE_URL}/api/v1/vocabs_base_on_category?sort=frequent\""""
         },
         {
             "description": "Create vocabularies (increments usage if exists)",
@@ -262,7 +262,7 @@ def show_usage_examples():
         },
         {
             "description": "Get newest vocabularies (default)",
-            "curl": f"""curl -H "Authorization: Bearer <token>" "{BASE_URL}/api/v1/unique-vocabs\""""
+            "curl": f"""curl -H "Authorization: Bearer <token>" "{BASE_URL}/api/v1/vocabs_base_on_category\""""
         }
     ]
     

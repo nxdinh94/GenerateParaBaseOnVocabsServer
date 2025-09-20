@@ -11,7 +11,7 @@ BASE_URL = "http://localhost:8001"
 def test_unique_vocabs_new_format():
     """Test the updated unique-vocabs endpoint format"""
     print("=" * 60)
-    print("Testing GET /api/v1/unique-vocabs (Updated Format)")
+    print("Testing GET /api/v1/vocabs_base_on_category (Updated Format)")
     print("=" * 60)
     
     print("\n📋 Expected Response Format:")
@@ -50,7 +50,7 @@ def test_unique_vocabs_new_format():
     print("\n🧪 Testing without authentication (should fail):")
     try:
         response = requests.get(
-            f"{BASE_URL}/api/v1/unique-vocabs",
+            f"{BASE_URL}/api/v1/vocabs_base_on_category",
             headers={"Content-Type": "application/json"}
         )
         print(f"Status Code: {response.status_code}")
@@ -64,7 +64,7 @@ def test_unique_vocabs_new_format():
     print("\n📝 To test with real data:")
     print("1. Get JWT token from Google login")
     print("2. Create some vocabulary entries via POST /input-history/")
-    print("3. Call GET /unique-vocabs with Authorization header")
+    print("3. Call GET /vocabs_base_on_category with Authorization header")
     print("4. Verify documents are sorted by newest first")
 
 def test_input_history_integration():
@@ -82,7 +82,7 @@ def test_input_history_integration():
     print("\n🔄 What happens:")
     print("1. POST /input-history/ saves to learned_vocabs collection")
     print("2. Creates document with timestamps and user_id")
-    print("3. GET /unique-vocabs returns all documents for user")
+    print("3. GET /vocabs_base_on_category returns all documents for user")
     print("4. Documents sorted by created_at (newest first)")
     print("5. user_id excluded from response")
     

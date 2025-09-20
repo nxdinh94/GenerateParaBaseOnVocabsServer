@@ -34,10 +34,10 @@ def test_with_auth_token():
     }
     
     test_urls = [
-        f"{BASE_URL}/api/v1/unique-vocabs",
-        f"{BASE_URL}/api/v1/unique-vocabs?sort=newest", 
-        f"{BASE_URL}/api/v1/unique-vocabs?sort=oldest",
-        f"{BASE_URL}/api/v1/unique-vocabs?sort=alphabetical"
+        f"{BASE_URL}/api/v1/vocabs_base_on_category",
+        f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=newest", 
+        f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=oldest",
+        f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=alphabetical"
     ]
     
     print("\n🔧 Test URLs that will work with valid token:")
@@ -69,7 +69,7 @@ def test_sort_parameter_validation():
     print("\n🧪 Testing Sort Parameter Validation")
     print("=" * 50)
     
-    invalid_sort_url = f"{BASE_URL}/api/v1/unique-vocabs?sort=invalid"
+    invalid_sort_url = f"{BASE_URL}/api/v1/vocabs_base_on_category?sort=invalid"
     
     print(f"Testing invalid sort: {invalid_sort_url}")
     
@@ -99,23 +99,23 @@ def show_curl_examples():
     examples = [
         {
             "description": "Default sort (newest first)",
-            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/unique-vocabs\""""
+            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/vocabs_base_on_category\""""
         },
         {
             "description": "Explicit newest sort",
-            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/unique-vocabs?sort=newest\""""
+            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/vocabs_base_on_category?sort=newest\""""
         },
         {
             "description": "Oldest first sort", 
-            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/unique-vocabs?sort=oldest\""""
+            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/vocabs_base_on_category?sort=oldest\""""
         },
         {
             "description": "Alphabetical sort",
-            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/unique-vocabs?sort=alphabetical\""""
+            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/vocabs_base_on_category?sort=alphabetical\""""
         },
         {
             "description": "Invalid sort (should return 400)",
-            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/unique-vocabs?sort=invalid\""""
+            "curl": f"""curl -H "Authorization: Bearer <YOUR_TOKEN>" "{BASE_URL}/api/v1/vocabs_base_on_category?sort=invalid\""""
         }
     ]
     

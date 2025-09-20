@@ -7,9 +7,9 @@ import json
 def test_unique_vocabs():
     """Test the unique-vocabs endpoint"""
     try:
-        print("🔍 Testing /unique-vocabs endpoint...")
+        print("🔍 Testing /vocabs_base_on_category endpoint...")
         
-        response = requests.get("http://127.0.0.1:8000/api/v1/unique-vocabs")
+        response = requests.get("http://127.0.0.1:8000/api/v1/vocabs_base_on_category")
         
         if response.status_code == 200:
             result = response.json()
@@ -69,7 +69,7 @@ def test_api_comparison():
         # Get saved paragraphs
         response1 = requests.get("http://127.0.0.1:8000/api/v1/saved-paragraphs")
         # Get unique vocabs
-        response2 = requests.get("http://127.0.0.1:8000/api/v1/unique-vocabs")
+        response2 = requests.get("http://127.0.0.1:8000/api/v1/vocabs_base_on_category")
         
         if response1.status_code == 200 and response2.status_code == 200:
             paragraphs_data = response1.json()
@@ -101,7 +101,7 @@ def test_api_comparison():
         print(f"❌ Error in comparison: {e}")
 
 if __name__ == "__main__":
-    print("🚀 Testing the /unique-vocabs endpoint...\n")
+    print("🚀 Testing the /vocabs_base_on_category endpoint...\n")
     
     if test_unique_vocabs():
         test_api_comparison()

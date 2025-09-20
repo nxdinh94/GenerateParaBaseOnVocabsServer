@@ -1,11 +1,11 @@
 # Unique Vocabs API - Sort Functionality Documentation
 
 ## Overview
-The `/unique-vocabs` API endpoint has been enhanced with comprehensive sorting functionality that returns all fields sorted by newest first by default.
+The `/vocabs_base_on_category` API endpoint has been enhanced with comprehensive sorting functionality that returns all fields sorted by newest first by default.
 
 ## API Endpoint
 ```
-GET /api/v1/unique-vocabs?sort={sort_option}
+GET /api/v1/vocabs_base_on_category?sort={sort_option}
 ```
 
 ## Authentication
@@ -113,36 +113,36 @@ All documents include the following fields:
 
 ### Default Sort (Newest First)
 ```bash
-curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/unique-vocabs"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/vocabs_base_on_category"
 ```
 
 ### Explicit Newest Sort
 ```bash
-curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/unique-vocabs?sort=newest"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/vocabs_base_on_category?sort=newest"
 ```
 
 ### Oldest First Sort
 ```bash
-curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/unique-vocabs?sort=oldest"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/vocabs_base_on_category?sort=oldest"
 ```
 
 ### Alphabetical Sort
 ```bash
-curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/unique-vocabs?sort=alphabetical"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/v1/vocabs_base_on_category?sort=alphabetical"
 ```
 
 ## JavaScript Example
 
 ```javascript
 // Get newest vocabularies (default)
-const response = await fetch('/api/v1/unique-vocabs', {
+const response = await fetch('/api/v1/vocabs_base_on_category', {
   headers: {
     'Authorization': `Bearer ${jwtToken}`
   }
 });
 
 // Get with specific sort
-const oldestResponse = await fetch('/api/v1/unique-vocabs?sort=oldest', {
+const oldestResponse = await fetch('/api/v1/vocabs_base_on_category?sort=oldest', {
   headers: {
     'Authorization': `Bearer ${jwtToken}`
   }
