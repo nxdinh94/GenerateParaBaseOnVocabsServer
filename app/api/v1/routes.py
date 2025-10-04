@@ -131,6 +131,24 @@ async def google_login(req: schemas.GoogleLoginRequest):
         await refresh_token_crud.create_refresh_token(refresh_token_data)
         logger.info(f"💾 Saved JWT refresh token for user: {user_db.email}")
         
+        # Check if user has a default vocabulary collection, create one if not
+        from app.database.crud import get_vocab_collection_crud
+        from app.database.models import VocabCollectionCreate
+        
+        vocab_collection_crud = get_vocab_collection_crud()
+        user_collections = await vocab_collection_crud.get_user_vocab_collections(str(user_db.id))
+        
+        if not user_collections:
+            # Create default "Default" collection for new user
+            default_collection_data = VocabCollectionCreate(
+                name="Default",
+                user_id=str(user_db.id)
+            )
+            default_collection = await vocab_collection_crud.create_vocab_collection(default_collection_data)
+            logger.info(f"📚 Created default vocabulary collection for user: {user_db.email} (Collection ID: {default_collection.id})")
+        else:
+            logger.info(f"📚 User {user_db.email} already has {len(user_collections)} vocabulary collection(s)")
+        
         logger.info(f"✅ User {user_info.get('email')} logged in successfully")
         
         return schemas.GoogleLoginResponse(

@@ -524,6 +524,8 @@ class VocabCollectionCRUD:
     async def create_vocab_collection(self, collection_data: VocabCollectionCreate) -> VocabCollectionInDB:
         """Create new vocab collection"""
         collection_dict = collection_data.dict()
+        # Convert user_id string to ObjectId for storage
+        collection_dict['user_id'] = ObjectId(collection_dict['user_id'])
         collection_dict['created_at'] = datetime.utcnow()
         collection_dict['updated_at'] = datetime.utcnow()
         
