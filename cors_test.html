@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>CORS Test for English Learning API</h1>
+    <button onclick="testCORS()">Test CORS</button>
+    <div id="result"></div>
+
+    <script>
+        async function testCORS() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing CORS...';
+            
+            try {
+                // Test the API endpoint that was failing
+                const response = await fetch('http://127.0.0.1:8000/api/v1/test-data', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <h3>✅ CORS Test Successful!</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Response:</strong></p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h3>⚠️ CORS Working but API Error</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p>CORS is working, but got API error: ${response.statusText}</p>
+                    `;
+                }
+            } catch (error) {
+                if (error.message.includes('CORS')) {
+                    resultDiv.innerHTML = `
+                        <h3>❌ CORS Error Still Present</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>The server may need to be restarted for CORS changes to take effect.</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h3>❌ Network Error</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>Make sure the server is running on http://127.0.0.1:8000</p>
+                    `;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

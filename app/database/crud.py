@@ -342,8 +342,8 @@ class LearnedVocabsCRUD:
     async def create_learned_vocabs(self, vocabs_data: LearnedVocabsCreateInternal) -> LearnedVocabsInDB:
         """Create new learned vocabs entry"""
         vocabs_dict = vocabs_data.dict()
-        # Convert user_id string to ObjectId for storage
-        vocabs_dict['user_id'] = ObjectId(vocabs_dict['user_id'])
+        # Convert collection_id string to ObjectId for storage
+        vocabs_dict['collection_id'] = ObjectId(vocabs_dict['collection_id'])
         current_time = datetime.utcnow()
         vocabs_dict['created_at'] = current_time
         vocabs_dict['updated_at'] = current_time
