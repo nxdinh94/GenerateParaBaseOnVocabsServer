@@ -15,7 +15,10 @@ from app.database.models import (
     RefreshTokenCreate, RefreshTokenInDB, RefreshTokenResponse,
     InputHistoryCreate, InputHistoryCreateInternal, InputHistoryInDB, InputHistoryResponse,
     SavedParagraphCreate, SavedParagraphInDB, SavedParagraphResponse,
-    LearnedVocabsCreate, LearnedVocabsCreateInternal, LearnedVocabsInDB, LearnedVocabsResponse
+    LearnedVocabsCreate, LearnedVocabsCreateInternal, LearnedVocabsInDB, LearnedVocabsResponse,
+    VocabCollectionCreate, VocabCollectionInDB, VocabCollectionResponse,
+    HistoryByDateCreate, HistoryByDateInDB, HistoryByDateResponse,
+    UserFeedbackCreate, UserFeedbackInDB, UserFeedbackResponse
 )
 
 class UserCRUD:
@@ -368,8 +371,8 @@ class LearnedVocabsCRUD:
             vocabs_list.append(LearnedVocabsInDB(**vocabs))
         return vocabs_list
     
-    async def find_by_exact_vocabs(self, user_id: str, vocabs: List[str]) -> Optional[LearnedVocabsInDB]:
-        """Find learned vocabs by exact vocab match for a user"""
+    async def find_by_exact_vocabs(self, collection_id: str, vocabs: List[str]) -> Optional[LearnedVocabsInDB]:
+        """Find learned vocabs by exact vocab match within a collection"""
         # Normalize and sort vocabs for consistent comparison
         def normalize_vocabs(vocab_list):
             # Filter out empty/whitespace-only vocabs, convert to lowercase, strip, and sort
@@ -382,15 +385,15 @@ class LearnedVocabsCRUD:
             return sorted(normalized)
         
         target_vocabs = normalize_vocabs(vocabs)
-        print(f"🔍 DEBUG: Looking for normalized vocabs: {target_vocabs}")
+        print(f"🔍 DEBUG: Looking for normalized vocabs: {target_vocabs} in collection {collection_id}")
         
         # Don't search if no valid vocabs provided
         if not target_vocabs:
             print("⚠️ DEBUG: No valid vocabs provided, returning None")
             return None
         
-        # Find all learned vocabs for the user
-        cursor = self.collection.find({"user_id": ObjectId(user_id), "is_deleted": False})
+        # Find all learned vocabs in the collection
+        cursor = self.collection.find({"collection_id": ObjectId(collection_id), "is_deleted": False})
         
         count = 0
         async for vocabs_entry in cursor:
@@ -469,15 +472,31 @@ class LearnedVocabsCRUD:
         return result.deleted_count > 0
     
     async def delete_vocabs_containing_word(self, user_id: str, word: str) -> int:
-        """Delete all learned vocabs entries containing the specified word for a user"""
+        """Delete all learned vocabs entries containing the specified word for a user (through their collections)"""
         # Normalize the word for comparison
         normalized_word = word.strip().lower()
         
         if not normalized_word:
             return 0
         
-        # Find all user's learned vocabs entries that contain the word
-        cursor = self.collection.find({"user_id": ObjectId(user_id), "is_deleted": False})
+        from app.database.connection import get_collection
+        
+        # Get user's collections first
+        vocab_collections = get_collection("vocab_collections")
+        user_collection_cursor = vocab_collections.find({"user_id": ObjectId(user_id)})
+        
+        user_collection_ids = []
+        async for collection in user_collection_cursor:
+            user_collection_ids.append(collection["_id"])
+        
+        if not user_collection_ids:
+            return 0  # User has no collections
+        
+        # Find all learned vocabs entries in user's collections that contain the word
+        cursor = self.collection.find({
+            "collection_id": {"$in": user_collection_ids},
+            "is_deleted": False
+        })
         
         entries_to_delete = []
         async for vocabs_entry in cursor:
@@ -495,6 +514,214 @@ class LearnedVocabsCRUD:
         
         return 0
 
+class VocabCollectionCRUD:
+    """CRUD operations for Vocab Collections"""
+    
+    @property
+    def collection(self) -> AsyncIOMotorCollection:
+        return get_collection("vocab_collections")
+    
+    async def create_vocab_collection(self, collection_data: VocabCollectionCreate) -> VocabCollectionInDB:
+        """Create new vocab collection"""
+        collection_dict = collection_data.dict()
+        collection_dict['created_at'] = datetime.utcnow()
+        collection_dict['updated_at'] = datetime.utcnow()
+        
+        result = await self.collection.insert_one(collection_dict)
+        created_collection = await self.collection.find_one({"_id": result.inserted_id})
+        return VocabCollectionInDB(**created_collection)
+    
+    async def get_vocab_collection_by_id(self, collection_id: str) -> Optional[VocabCollectionInDB]:
+        """Get vocab collection by ID"""
+        collection = await self.collection.find_one({"_id": ObjectId(collection_id)})
+        return VocabCollectionInDB(**collection) if collection else None
+    
+    async def get_all_vocab_collections(self, limit: int = 100) -> List[VocabCollectionInDB]:
+        """Get all vocab collections"""
+        cursor = self.collection.find({}).sort("created_at", -1).limit(limit)
+        collections = []
+        async for collection in cursor:
+            collections.append(VocabCollectionInDB(**collection))
+        return collections
+    
+    async def get_user_vocab_collections(self, user_id: str, limit: int = 100) -> List[VocabCollectionInDB]:
+        """Get all vocab collections for a specific user"""
+        cursor = self.collection.find({"user_id": ObjectId(user_id)}).sort("created_at", -1).limit(limit)
+        collections = []
+        async for collection in cursor:
+            collections.append(VocabCollectionInDB(**collection))
+        return collections
+    
+    async def update_vocab_collection(self, collection_id: str, name: str) -> Optional[VocabCollectionInDB]:
+        """Update vocab collection name"""
+        update_dict = {
+            "name": name,
+            "updated_at": datetime.utcnow()
+        }
+        
+        await self.collection.update_one(
+            {"_id": ObjectId(collection_id)}, 
+            {"$set": update_dict}
+        )
+        
+        return await self.get_vocab_collection_by_id(collection_id)
+    
+    async def delete_vocab_collection(self, collection_id: str) -> bool:
+        """Delete vocab collection"""
+        result = await self.collection.delete_one({"_id": ObjectId(collection_id)})
+        return result.deleted_count > 0
+
+class HistoryByDateCRUD:
+    """CRUD operations for History by Date"""
+    
+    @property
+    def collection(self) -> AsyncIOMotorCollection:
+        return get_collection("history_by_date")
+    
+    async def create_history_by_date(self, history_data: HistoryByDateCreate) -> HistoryByDateInDB:
+        """Create new history by date entry"""
+        history_dict = history_data.dict()
+        
+        # Convert study_date to date-only (remove time component)
+        study_datetime = history_dict['study_date']
+        if isinstance(study_datetime, datetime):
+            # Store as datetime with time set to 00:00:00 for consistency
+            history_dict['study_date'] = study_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        history_dict['created_at'] = datetime.utcnow()
+        
+        result = await self.collection.insert_one(history_dict)
+        created_history = await self.collection.find_one({"_id": result.inserted_id})
+        return HistoryByDateInDB(**created_history)
+    
+    async def get_history_by_vocab_id(self, vocab_id: str) -> List[HistoryByDateInDB]:
+        """Get all history entries for a specific vocab"""
+        cursor = self.collection.find({"vocab_id": ObjectId(vocab_id)}).sort("study_date", -1)
+        histories = []
+        async for history in cursor:
+            histories.append(HistoryByDateInDB(**history))
+        return histories
+    
+    async def get_history_by_date_range(self, vocab_id: str, start_date: datetime, end_date: datetime) -> List[HistoryByDateInDB]:
+        """Get history entries for a vocab within date range"""
+        # Convert to date-only for comparison (start of day)
+        start_date_only = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date_only = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        cursor = self.collection.find({
+            "vocab_id": ObjectId(vocab_id),
+            "study_date": {"$gte": start_date_only, "$lte": end_date_only}
+        }).sort("study_date", -1)
+        histories = []
+        async for history in cursor:
+            histories.append(HistoryByDateInDB(**history))
+        return histories
+    
+    async def increment_study_count(self, vocab_id: str, study_date: datetime) -> HistoryByDateInDB:
+        """Increment or create study count for a specific date"""
+        # Convert to date-only (remove time component)
+        date_only = study_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Try to find existing entry for this vocab and exact date
+        existing_entry = await self.collection.find_one({
+            "vocab_id": ObjectId(vocab_id),
+            "study_date": date_only
+        })
+        
+        if existing_entry:
+            # Increment existing count
+            await self.collection.update_one(
+                {"_id": existing_entry["_id"]},
+                {"$inc": {"count": 1}}
+            )
+            updated_entry = await self.collection.find_one({"_id": existing_entry["_id"]})
+            return HistoryByDateInDB(**updated_entry)
+        else:
+            # Create new entry with date-only
+            history_data = HistoryByDateCreate(
+                vocab_id=vocab_id,
+                study_date=date_only,  # Use date-only
+                count=1
+            )
+            return await self.create_history_by_date(history_data)
+    
+    async def get_user_study_history(self, user_id: str, limit: int = 100) -> List[dict]:
+        """Get user's study history with vocab info"""
+        # Aggregation pipeline to join with learned_vocabs collection
+        pipeline = [
+            {
+                "$lookup": {
+                    "from": "learned_vocabs",
+                    "localField": "vocab_id",
+                    "foreignField": "_id",
+                    "as": "vocab_info"
+                }
+            },
+            {
+                "$unwind": "$vocab_info"
+            },
+            {
+                "$match": {
+                    "vocab_info.user_id": ObjectId(user_id),
+                    "vocab_info.is_deleted": False
+                }
+            },
+            {
+                "$sort": {"study_date": -1}
+            },
+            {
+                "$limit": limit
+            }
+        ]
+        
+        cursor = self.collection.aggregate(pipeline)
+        histories = []
+        async for history in cursor:
+            histories.append(history)
+        return histories
+
+class UserFeedbackCRUD:
+    """CRUD operations for User Feedback"""
+    
+    @property
+    def collection(self) -> AsyncIOMotorCollection:
+        return get_collection("user_feedback")
+    
+    async def create_feedback(self, feedback_data: UserFeedbackCreate) -> UserFeedbackInDB:
+        """Create new user feedback"""
+        feedback_dict = feedback_data.dict()
+        feedback_dict['created_at'] = datetime.utcnow()
+        
+        result = await self.collection.insert_one(feedback_dict)
+        created_feedback = await self.collection.find_one({"_id": result.inserted_id})
+        return UserFeedbackInDB(**created_feedback)
+    
+    async def get_feedback_by_id(self, feedback_id: str) -> Optional[UserFeedbackInDB]:
+        """Get feedback by ID"""
+        feedback = await self.collection.find_one({"_id": ObjectId(feedback_id)})
+        return UserFeedbackInDB(**feedback) if feedback else None
+    
+    async def get_all_feedback(self, limit: int = 100) -> List[UserFeedbackInDB]:
+        """Get all feedback entries"""
+        cursor = self.collection.find({}).sort("created_at", -1).limit(limit)
+        feedbacks = []
+        async for feedback in cursor:
+            feedbacks.append(UserFeedbackInDB(**feedback))
+        return feedbacks
+    
+    async def get_feedback_by_email(self, email: str, limit: int = 50) -> List[UserFeedbackInDB]:
+        """Get feedback by user email"""
+        cursor = self.collection.find({"email": email}).sort("created_at", -1).limit(limit)
+        feedbacks = []
+        async for feedback in cursor:
+            feedbacks.append(UserFeedbackInDB(**feedback))
+        return feedbacks
+    
+    async def delete_feedback(self, feedback_id: str) -> bool:
+        """Delete feedback entry"""
+        result = await self.collection.delete_one({"_id": ObjectId(feedback_id)})
+        return result.deleted_count > 0
+
 # Create CRUD instances (lazy initialization)
 def get_user_crud():
     return UserCRUD()
@@ -510,3 +737,12 @@ def get_saved_paragraph_crud():
 
 def get_learned_vocabs_crud():
     return LearnedVocabsCRUD()
+
+def get_vocab_collection_crud():
+    return VocabCollectionCRUD()
+
+def get_history_by_date_crud():
+    return HistoryByDateCRUD()
+
+def get_user_feedback_crud():
+    return UserFeedbackCRUD()

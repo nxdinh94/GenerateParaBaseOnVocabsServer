@@ -252,13 +252,10 @@ class SavedParagraphResponse(BaseModel):
         "populate_by_name": True,
     }
 
-# Learned Vocabs Models
-class LearnedVocabsCreate(BaseModel):
-    vocabs: List[str] = Field(..., min_length=1)
-
-class LearnedVocabsCreateInternal(BaseModel):
+# Vocab Collections Models
+class VocabCollectionCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
     user_id: PyObjectId
-    vocabs: List[str] = Field(..., min_length=1)
     
     @field_validator('user_id', mode='before')
     @classmethod
@@ -269,15 +266,12 @@ class LearnedVocabsCreateInternal(BaseModel):
             return v
         raise ValueError("Invalid user_id ObjectId")
 
-class LearnedVocabsInDB(BaseModel):
+class VocabCollectionInDB(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    name: str
     user_id: PyObjectId
-    vocabs: List[str]
-    usage_count: int = Field(default=1)  # Track how many times this vocab set is used
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    deleted_at: Optional[datetime] = None
-    is_deleted: bool = Field(default=False)
     
     @field_validator('id', 'user_id', mode='before')
     @classmethod
@@ -295,19 +289,195 @@ class LearnedVocabsInDB(BaseModel):
         "arbitrary_types_allowed": True,
     }
 
+class VocabCollectionResponse(BaseModel):
+    id: PyObjectId = Field(alias="_id")
+    name: str
+    user_id: PyObjectId
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+    
+    model_config = {
+        "populate_by_name": True,
+    }
+
+# Learned Vocabs Models (Modified to include collection_id)
+class LearnedVocabsCreate(BaseModel):
+    vocabs: List[str] = Field(..., min_length=1)
+    collection_id: Optional[PyObjectId] = None
+    
+    @field_validator('collection_id', mode='before')
+    @classmethod
+    def validate_collection_id(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid collection_id ObjectId")
+
+class LearnedVocabsCreateInternal(BaseModel):
+    vocabs: List[str] = Field(..., min_length=1)
+    collection_id: PyObjectId  # Now required since user_id is removed
+    
+    @field_validator('collection_id', mode='before')
+    @classmethod
+    def validate_collection_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid collection_id ObjectId")
+
+class LearnedVocabsInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    vocabs: List[str]
+    collection_id: PyObjectId  # Required reference to vocab_collections
+    usage_count: int = Field(default=1)  # Track how many times this vocab set is used
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    deleted_at: Optional[datetime] = None
+    is_deleted: bool = Field(default=False)
+    
+    @field_validator('id', 'collection_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid ObjectId")
+    
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+    }
+
 class LearnedVocabsResponse(BaseModel):
     id: PyObjectId = Field(alias="_id")
-    user_id: PyObjectId
     vocabs: List[str]
+    collection_id: PyObjectId
     usage_count: int
     created_at: datetime
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
     is_deleted: bool
     
-    @field_validator('id', 'user_id', mode='before')
+    @field_validator('id', 'collection_id', mode='before')
     @classmethod
     def validate_object_ids(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+    
+    model_config = {
+        "populate_by_name": True,
+    }
+
+# History by Date Models
+class HistoryByDateCreate(BaseModel):
+    vocab_id: PyObjectId
+    study_date: datetime  # Will be converted to date-only in CRUD
+    count: int = Field(default=1, ge=1)
+    
+    @field_validator('vocab_id', mode='before')
+    @classmethod
+    def validate_vocab_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid vocab_id ObjectId")
+
+class HistoryByDateInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    vocab_id: PyObjectId  # Reference to learned_vocabs collection
+    study_date: datetime  # Stored as date-only (yyyy-mm-dd)
+    count: int = Field(default=1, ge=1)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    @field_validator('id', 'vocab_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid ObjectId")
+    
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+    }
+
+class HistoryByDateResponse(BaseModel):
+    id: PyObjectId = Field(alias="_id")
+    vocab_id: PyObjectId
+    study_date: datetime  # Will be serialized as date-only string
+    count: int
+    created_at: datetime
+    
+    @field_validator('id', 'vocab_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+    
+    model_config = {
+        "populate_by_name": True,
+    }
+
+# User Feedback Models
+class UserFeedbackCreate(BaseModel):
+    email: EmailStr
+    name: Optional[str] = Field(None, max_length=100)
+    message: str = Field(..., min_length=1, max_length=5000)
+
+class UserFeedbackInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    email: str
+    name: Optional[str] = None
+    message: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    @field_validator('id', mode='before')
+    @classmethod
+    def validate_id(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid ObjectId")
+    
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+    }
+
+class UserFeedbackResponse(BaseModel):
+    id: PyObjectId = Field(alias="_id")
+    email: str
+    name: Optional[str] = None
+    message: str
+    created_at: datetime
+    
+    @field_validator('id', mode='before')
+    @classmethod
+    def validate_id(cls, v):
         if isinstance(v, ObjectId):
             return str(v)
         return v
