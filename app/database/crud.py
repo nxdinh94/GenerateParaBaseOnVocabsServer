@@ -424,6 +424,14 @@ class LearnedVocabsCRUD:
         
         return sorted(list(all_vocabs))
     
+    async def get_vocabs_by_collection(self, collection_id: str, limit: int = 1000) -> List[LearnedVocabsInDB]:
+        """Get all learned vocabs entries for a specific collection"""
+        cursor = self.collection.find({"collection_id": ObjectId(collection_id), "is_deleted": False}).sort("created_at", -1).limit(limit)
+        vocabs_list = []
+        async for vocabs in cursor:
+            vocabs_list.append(LearnedVocabsInDB(**vocabs))
+        return vocabs_list
+    
     async def update_learned_vocabs(self, vocabs_id: str, new_vocabs: List[str]) -> Optional[LearnedVocabsInDB]:
         """Update learned vocabs entry"""
         update_dict = {
