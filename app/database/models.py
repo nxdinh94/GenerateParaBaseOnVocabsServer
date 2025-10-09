@@ -309,7 +309,7 @@ class VocabCollectionResponse(BaseModel):
 
 # Learned Vocabs Models (Modified to include collection_id)
 class LearnedVocabsCreate(BaseModel):
-    vocabs: List[str] = Field(..., min_length=1)
+    vocab: str = Field(..., min_length=1)
     collection_id: Optional[PyObjectId] = None
     
     @field_validator('collection_id', mode='before')
@@ -324,7 +324,7 @@ class LearnedVocabsCreate(BaseModel):
         raise ValueError("Invalid collection_id ObjectId")
 
 class LearnedVocabsCreateInternal(BaseModel):
-    vocabs: List[str] = Field(..., min_length=1)
+    vocab: str = Field(..., min_length=1)
     collection_id: PyObjectId  # Now required since user_id is removed
     
     @field_validator('collection_id', mode='before')
@@ -338,9 +338,9 @@ class LearnedVocabsCreateInternal(BaseModel):
 
 class LearnedVocabsInDB(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
-    vocabs: List[str]
+    vocab: str
     collection_id: PyObjectId  # Required reference to vocab_collections
-    usage_count: int = Field(default=1)  # Track how many times this vocab set is used
+    usage_count: int = Field(default=1)  # Track how many times this vocab is used
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     deleted_at: Optional[datetime] = None
@@ -364,7 +364,7 @@ class LearnedVocabsInDB(BaseModel):
 
 class LearnedVocabsResponse(BaseModel):
     id: PyObjectId = Field(alias="_id")
-    vocabs: List[str]
+    vocab: str
     collection_id: PyObjectId
     usage_count: int
     created_at: datetime

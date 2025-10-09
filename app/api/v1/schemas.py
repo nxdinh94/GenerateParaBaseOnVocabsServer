@@ -196,16 +196,22 @@ class UserFeedbackListResponse(BaseModel):
 
 # === Updated Learned Vocabs (with collection support) ===
 class LearnedVocabsCreateRequest(BaseModel):
-    vocabs: List[str]
+    vocabs: List[str]  # Request still accepts a list of vocabs
     collection_id: str  # Now required since user_id is in collections
 
 class LearnedVocabsResponse(BaseModel):
     id: str
-    vocabs: List[str]
+    vocab: str  # Changed to single string
     collection_id: str  # Now required
     usage_count: int
     created_at: str
     updated_at: Optional[str] = None
     is_new: bool = False
     usage_incremented: bool = False
+    status: bool = True
+
+class LearnedVocabsBatchResponse(BaseModel):
+    """Response for batch creation of learned vocabs"""
+    created: List[LearnedVocabsResponse]
+    total_created: int
     status: bool = True

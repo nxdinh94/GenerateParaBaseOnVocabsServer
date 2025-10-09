@@ -340,7 +340,7 @@ class LearnedVocabsCRUD:
         return get_collection("learned_vocabs")
     
     async def create_learned_vocabs(self, vocabs_data: LearnedVocabsCreateInternal) -> LearnedVocabsInDB:
-        """Create new learned vocabs entry"""
+        """Create new learned vocab entry (single word)"""
         vocabs_dict = vocabs_data.dict()
         # Convert collection_id string to ObjectId for storage
         vocabs_dict['collection_id'] = ObjectId(vocabs_dict['collection_id'])
@@ -371,44 +371,30 @@ class LearnedVocabsCRUD:
             vocabs_list.append(LearnedVocabsInDB(**vocabs))
         return vocabs_list
     
-    async def find_by_exact_vocabs(self, collection_id: str, vocabs: List[str]) -> Optional[LearnedVocabsInDB]:
-        """Find learned vocabs by exact vocab match within a collection"""
-        # Normalize and sort vocabs for consistent comparison
-        def normalize_vocabs(vocab_list):
-            # Filter out empty/whitespace-only vocabs, convert to lowercase, strip, and sort
-            normalized = []
-            for vocab in vocab_list:
-                if isinstance(vocab, str):
-                    cleaned = vocab.strip().lower()
-                    if cleaned:  # Only add non-empty vocabs
-                        normalized.append(cleaned)
-            return sorted(normalized)
+    async def find_by_exact_vocab(self, collection_id: str, vocab: str) -> Optional[LearnedVocabsInDB]:
+        """Find learned vocab by exact vocab match within a collection"""
+        # Normalize the vocab for comparison
+        normalized_vocab = vocab.strip().lower()
         
-        target_vocabs = normalize_vocabs(vocabs)
-        print(f"🔍 DEBUG: Looking for normalized vocabs: {target_vocabs} in collection {collection_id}")
+        print(f"🔍 DEBUG: Looking for normalized vocab: '{normalized_vocab}' in collection {collection_id}")
         
-        # Don't search if no valid vocabs provided
-        if not target_vocabs:
-            print("⚠️ DEBUG: No valid vocabs provided, returning None")
+        # Don't search if no valid vocab provided
+        if not normalized_vocab:
+            print("⚠️ DEBUG: No valid vocab provided, returning None")
             return None
         
-        # Find all learned vocabs in the collection
-        cursor = self.collection.find({"collection_id": ObjectId(collection_id), "is_deleted": False})
+        # Find the vocab in the collection (case-insensitive)
+        vocabs_entry = await self.collection.find_one({
+            "collection_id": ObjectId(collection_id),
+            "vocab": {"$regex": f"^{normalized_vocab}$", "$options": "i"},
+            "is_deleted": False
+        })
         
-        count = 0
-        async for vocabs_entry in cursor:
-            count += 1
-            # Get the vocabs from the document
-            entry_vocabs = vocabs_entry.get('vocabs', [])
-            existing_vocabs = normalize_vocabs(entry_vocabs)
-            print(f"🔍 DEBUG: Comparing with existing #{count}: {existing_vocabs}")
-            
-            # Check if vocabs match exactly
-            if existing_vocabs == target_vocabs:
-                print(f"✅ DEBUG: Match found at record #{count}!")
-                return LearnedVocabsInDB(**vocabs_entry)
+        if vocabs_entry:
+            print(f"✅ DEBUG: Match found!")
+            return LearnedVocabsInDB(**vocabs_entry)
         
-        print(f"❌ DEBUG: No match found among {count} records")
+        print(f"❌ DEBUG: No match found")
         return None
     
     async def get_all_user_vocabs(self, user_id: str) -> List[str]:
@@ -432,10 +418,10 @@ class LearnedVocabsCRUD:
             vocabs_list.append(LearnedVocabsInDB(**vocabs))
         return vocabs_list
     
-    async def update_learned_vocabs(self, vocabs_id: str, new_vocabs: List[str]) -> Optional[LearnedVocabsInDB]:
-        """Update learned vocabs entry"""
+    async def update_learned_vocabs(self, vocabs_id: str, new_vocab: str) -> Optional[LearnedVocabsInDB]:
+        """Update learned vocab entry (single word)"""
         update_dict = {
-            "vocabs": new_vocabs,
+            "vocab": new_vocab,
             "updated_at": datetime.utcnow()
         }
         
@@ -480,7 +466,7 @@ class LearnedVocabsCRUD:
         return result.deleted_count > 0
     
     async def delete_vocabs_containing_word(self, user_id: str, word: str) -> int:
-        """Delete all learned vocabs entries containing the specified word for a user (through their collections)"""
+        """Delete all learned vocab entries matching the specified word for a user (through their collections)"""
         # Normalize the word for comparison
         normalized_word = word.strip().lower()
         
@@ -500,27 +486,14 @@ class LearnedVocabsCRUD:
         if not user_collection_ids:
             return 0  # User has no collections
         
-        # Find all learned vocabs entries in user's collections that contain the word
-        cursor = self.collection.find({
+        # Delete all learned vocab entries in user's collections that match the word (case-insensitive)
+        result = await self.collection.delete_many({
             "collection_id": {"$in": user_collection_ids},
+            "vocab": {"$regex": f"^{normalized_word}$", "$options": "i"},
             "is_deleted": False
         })
         
-        entries_to_delete = []
-        async for vocabs_entry in cursor:
-            entry_vocabs = vocabs_entry.get('vocabs', [])
-            # Check if any vocab in the entry matches the target word
-            for vocab in entry_vocabs:
-                if isinstance(vocab, str) and vocab.strip().lower() == normalized_word:
-                    entries_to_delete.append(vocabs_entry['_id'])
-                    break  # Found the word in this entry, no need to check other vocabs
-        
-        # Delete all matching entries
-        if entries_to_delete:
-            result = await self.collection.delete_many({"_id": {"$in": entries_to_delete}})
-            return result.deleted_count
-        
-        return 0
+        return result.deleted_count
 
 class VocabCollectionCRUD:
     """CRUD operations for Vocab Collections"""

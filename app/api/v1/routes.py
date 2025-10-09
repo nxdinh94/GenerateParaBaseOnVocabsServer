@@ -866,7 +866,7 @@ async def get_vocabs_by_collection(collection_id: str, sort: str = "newest", cur
         for entry in learned_vocabs_entries:
             document = {
                 "id": str(entry.id),
-                "vocabs": entry.vocabs,
+                "vocab": entry.vocab,  # Changed from vocabs to vocab (single string)
                 "collection_id": str(entry.collection_id),
                 "usage_count": getattr(entry, 'usage_count', 1),  # Default to 1 if field doesn't exist
                 "created_at": entry.created_at.isoformat() if entry.created_at else None,
@@ -884,8 +884,8 @@ async def get_vocabs_by_collection(collection_id: str, sort: str = "newest", cur
             # Sort by created_at (oldest first) - handle None values properly
             documents.sort(key=lambda x: x["created_at"] or "1900-01-01T00:00:00", reverse=False)
         elif sort == "alphabetical":
-            # Sort by first vocabulary word alphabetically
-            documents.sort(key=lambda x: x["vocabs"][0].lower() if x["vocabs"] else "zzz")
+            # Sort by vocabulary word alphabetically
+            documents.sort(key=lambda x: x["vocab"].lower() if x["vocab"] else "zzz")
         elif sort == "frequent":
             # Sort by usage_count (most frequent first), then by created_at (newest first) as tiebreaker
             documents.sort(key=lambda x: (x["usage_count"], x["created_at"] or "1900-01-01T00:00:00"), reverse=True)
@@ -916,10 +916,10 @@ async def get_vocabs_by_collection(collection_id: str, sort: str = "newest", cur
         }
 
 # === Create learned vocabularies ===
-@router.post("/learned-vocabs", response_model=schemas.LearnedVocabsResponse)
+@router.post("/learned-vocabs", response_model=schemas.LearnedVocabsBatchResponse)
 async def create_learned_vocabs(req: schemas.LearnedVocabsCreateRequest, current_user: dict = Depends(get_current_user)):
     """
-    Create new learned vocabularies entry with optional collection assignment
+    Create new learned vocabularies - one document per vocabulary word
     """
     try:
         # Validate vocabularies
@@ -968,44 +968,53 @@ async def create_learned_vocabs(req: schemas.LearnedVocabsCreateRequest, current
                 "message": "You can only add vocabularies to your own collections"
             })
         
-        # Check if these exact vocabularies already exist in this collection
-        existing_vocabs = await learned_vocabs_crud.find_by_exact_vocabs(req.collection_id, cleaned_vocabs)
-        
-        if existing_vocabs:
-            # Increment usage count for existing entry
-            updated_vocabs = await learned_vocabs_crud.increment_usage_count(str(existing_vocabs.id))
-            logger.info(f"Incremented usage count for learned vocabs ID: {existing_vocabs.id}")
+        # Create one document for each vocabulary word
+        created_vocabs = []
+        for vocab in cleaned_vocabs:
+            # Check if this exact vocabulary already exists in this collection
+            existing_vocab = await learned_vocabs_crud.find_by_exact_vocab(req.collection_id, vocab)
             
-            return schemas.LearnedVocabsResponse(
-                id=str(updated_vocabs.id if updated_vocabs else existing_vocabs.id),
-                vocabs=updated_vocabs.vocabs if updated_vocabs else existing_vocabs.vocabs,
-                collection_id=str(existing_vocabs.collection_id),
-                usage_count=updated_vocabs.usage_count if updated_vocabs else getattr(existing_vocabs, 'usage_count', 1),
-                created_at=updated_vocabs.created_at.isoformat() if updated_vocabs and updated_vocabs.created_at else existing_vocabs.created_at.isoformat() if existing_vocabs.created_at else "",
-                updated_at=updated_vocabs.updated_at.isoformat() if updated_vocabs and updated_vocabs.updated_at else existing_vocabs.updated_at.isoformat() if existing_vocabs.updated_at else None,
-                is_new=False,
-                usage_incremented=True,
-                status=True
-            )
+            if existing_vocab:
+                # Increment usage count for existing entry
+                updated_vocab = await learned_vocabs_crud.increment_usage_count(str(existing_vocab.id))
+                logger.info(f"Incremented usage count for learned vocab '{vocab}' ID: {existing_vocab.id}")
+                
+                created_vocabs.append(schemas.LearnedVocabsResponse(
+                    id=str(updated_vocab.id if updated_vocab else existing_vocab.id),
+                    vocab=updated_vocab.vocab if updated_vocab else existing_vocab.vocab,
+                    collection_id=str(existing_vocab.collection_id),
+                    usage_count=updated_vocab.usage_count if updated_vocab else getattr(existing_vocab, 'usage_count', 1),
+                    created_at=updated_vocab.created_at.isoformat() if updated_vocab and updated_vocab.created_at else existing_vocab.created_at.isoformat() if existing_vocab.created_at else "",
+                    updated_at=updated_vocab.updated_at.isoformat() if updated_vocab and updated_vocab.updated_at else existing_vocab.updated_at.isoformat() if existing_vocab.updated_at else None,
+                    is_new=False,
+                    usage_incremented=True,
+                    status=True
+                ))
+            else:
+                # Create new learned vocab entry
+                vocab_create_data = LearnedVocabsCreateInternal(
+                    vocab=vocab,
+                    collection_id=req.collection_id
+                )
+                
+                learned_vocab = await learned_vocabs_crud.create_learned_vocabs(vocab_create_data)
+                logger.info(f"Created new learned vocab '{vocab}' with ID: {learned_vocab.id}")
+                
+                created_vocabs.append(schemas.LearnedVocabsResponse(
+                    id=str(learned_vocab.id),
+                    vocab=learned_vocab.vocab,
+                    collection_id=str(learned_vocab.collection_id),
+                    usage_count=getattr(learned_vocab, 'usage_count', 1),
+                    created_at=learned_vocab.created_at.isoformat() if learned_vocab.created_at else "",
+                    updated_at=learned_vocab.updated_at.isoformat() if learned_vocab.updated_at else None,
+                    is_new=True,
+                    usage_incremented=False,
+                    status=True
+                ))
         
-        # Create new learned vocabs entry
-        vocabs_create_data = LearnedVocabsCreateInternal(
-            vocabs=cleaned_vocabs,
-            collection_id=req.collection_id
-        )
-        
-        learned_vocabs = await learned_vocabs_crud.create_learned_vocabs(vocabs_create_data)
-        logger.info(f"Created new learned vocabs with ID: {learned_vocabs.id}")
-        
-        return schemas.LearnedVocabsResponse(
-            id=str(learned_vocabs.id),
-            vocabs=learned_vocabs.vocabs,
-            collection_id=str(learned_vocabs.collection_id),
-            usage_count=getattr(learned_vocabs, 'usage_count', 1),
-            created_at=learned_vocabs.created_at.isoformat() if learned_vocabs.created_at else "",
-            updated_at=learned_vocabs.updated_at.isoformat() if learned_vocabs.updated_at else None,
-            is_new=True,
-            usage_incremented=False,
+        return schemas.LearnedVocabsBatchResponse(
+            created=created_vocabs,
+            total_created=len(created_vocabs),
             status=True
         )
         
