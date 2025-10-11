@@ -215,3 +215,43 @@ class LearnedVocabsBatchResponse(BaseModel):
     created: List[LearnedVocabsResponse]
     total_created: int
     status: bool = True
+
+# === Streak ===
+class StreakCreateRequest(BaseModel):
+    learned_date: Optional[str] = None  # ISO format date string (YYYY-MM-DD) or datetime
+    count: Optional[int] = None
+    is_qualify: Optional[bool] = False
+
+class StreakResponse(BaseModel):
+    id: str
+    user_id: str
+    learned_date: str  # Will be returned as YYYY-MM-DD format
+    count: Optional[int] = None
+    is_qualify: bool = False
+    created_at: str
+    status: bool = True
+
+class DateCompletionStatus(BaseModel):
+    date: str  # YYYY-MM-DD format
+    completed: bool
+    count: Optional[int] = None
+    is_qualify: bool = False
+
+class StreakChainResponse(BaseModel):
+    id: int
+    start_date: str  # YYYY-MM-DD format
+    end_date: str  # YYYY-MM-DD format
+    dates: List[DateCompletionStatus]
+    total_days: int
+    completed_days: int
+    qualified_days: int
+    status: bool = True
+
+# === Change Selected Collection ===
+class ChangeSelectedCollectionRequest(BaseModel):
+    selected_collection_id: str
+
+class ChangeSelectedCollectionResponse(BaseModel):
+    status: bool = True
+    message: str
+    selected_collection_id: str

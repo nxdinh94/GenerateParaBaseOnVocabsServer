@@ -9,6 +9,7 @@ from app.database.models import GoogleUserCreate, RefreshTokenCreate
 from app.utils.logging_conf import get_logger
 from typing import Optional
 from datetime import datetime
+from bson import ObjectId
 
 logger = get_logger("routes")
 router = APIRouter(prefix="/api/v1", tags=["v1"])
@@ -133,7 +134,7 @@ async def google_login(req: schemas.GoogleLoginRequest):
         
         # Check if user has a default vocabulary collection, create one if not
         from app.database.crud import get_vocab_collection_crud
-        from app.database.models import VocabCollectionCreate
+        from app.database.models import VocabCollectionCreate, UserUpdate
         
         vocab_collection_crud = get_vocab_collection_crud()
         user_collections = await vocab_collection_crud.get_user_vocab_collections(str(user_db.id))
@@ -146,8 +147,28 @@ async def google_login(req: schemas.GoogleLoginRequest):
             )
             default_collection = await vocab_collection_crud.create_vocab_collection(default_collection_data)
             logger.info(f"📚 Created default vocabulary collection for user: {user_db.email} (Collection ID: {default_collection.id})")
+            
+            # Set the selected_collection_id to the default collection
+            update_data = UserUpdate(
+                name=None,
+                email=None,
+                avt=None
+            )
+            await user_crud.collection.update_one(
+                {"_id": ObjectId(str(user_db.id))},
+                {"$set": {"selected_collection_id": str(default_collection.id)}}
+            )
+            logger.info(f"📚 Set selected_collection_id to default collection for user: {user_db.email}")
         else:
             logger.info(f"📚 User {user_db.email} already has {len(user_collections)} vocabulary collection(s)")
+            
+            # If user doesn't have selected_collection_id set, set it to the first collection
+            if not user_db.selected_collection_id:
+                await user_crud.collection.update_one(
+                    {"_id": ObjectId(str(user_db.id))},
+                    {"$set": {"selected_collection_id": str(user_collections[0].id)}}
+                )
+                logger.info(f"📚 Set selected_collection_id to first collection for user: {user_db.email}")
         
         logger.info(f"✅ User {user_info.get('email')} logged in successfully")
         
@@ -469,10 +490,76 @@ async def logout(current_user: dict = Depends(get_current_user)):
             "details": str(e)
         })
 
+@router.post("/change-selected-collection", response_model=schemas.ChangeSelectedCollectionResponse)
+async def change_selected_collection(req: schemas.ChangeSelectedCollectionRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Change user's selected vocabulary collection
+    Requires Bearer token in Authorization header
+    """
+    try:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token (missing both 'user_id' and 'id' fields)"
+            })
+        
+        # Validate collection_id
+        if not req.selected_collection_id or req.selected_collection_id.strip() == "":
+            raise HTTPException(status_code=400, detail={
+                "error": "missing_collection_id",
+                "message": "selected_collection_id is required"
+            })
+        
+        # Verify collection exists and belongs to user
+        from app.database.crud import get_vocab_collection_crud
+        vocab_collection_crud = get_vocab_collection_crud()
+        
+        collection = await vocab_collection_crud.get_vocab_collection_by_id(req.selected_collection_id)
+        if not collection:
+            raise HTTPException(status_code=404, detail={
+                "error": "collection_not_found",
+                "message": "Vocabulary collection not found"
+            })
+        
+        if str(collection.user_id) != user_id:
+            raise HTTPException(status_code=403, detail={
+                "error": "access_denied",
+                "message": "You can only select your own vocabulary collections"
+            })
+        
+        # Update user's selected collection
+        user_crud = get_user_crud()
+        updated_user = await user_crud.update_selected_collection(user_id, req.selected_collection_id)
+        
+        if not updated_user:
+            raise HTTPException(status_code=500, detail={
+                "error": "update_failed",
+                "message": "Failed to update selected collection"
+            })
+        
+        logger.info(f"✅ User {current_user.get('email')} changed selected collection to {req.selected_collection_id}")
+        
+        return schemas.ChangeSelectedCollectionResponse(
+            status=True,
+            message="Selected collection updated successfully",
+            selected_collection_id=req.selected_collection_id
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error changing selected collection")
+        raise HTTPException(status_code=500, detail={
+            "error": "update_failed",
+            "message": "Failed to change selected collection",
+            "details": str(e)
+        })
+
 
 # === Paragraph with vocabularies ===
 @router.post("/generate-paragraph", response_model=schemas.ParagraphResponse)
-async def generate_paragraph(req: schemas.ParagraphRequest):
+async def generate_paragraph(req: schemas.ParagraphRequest, current_user: dict = Depends(get_current_user)):
     try:
         # Validate required fields
         if not req.language or req.language.strip() == "":
@@ -541,6 +628,32 @@ async def generate_paragraph(req: schemas.ParagraphRequest):
 
         # res_text = await openai_client.generate_text(final_prompt)
         res_text = await gemini_client.generate_text(final_prompt)
+        
+        # After successfully generating paragraph, create/update streak entry
+        try:
+            from app.database.crud import get_streak_crud
+            from app.database.models import StreakCreateInternal
+            
+            user_id = current_user.get("user_id") or current_user.get("id")
+            if user_id:
+                streak_crud = get_streak_crud()
+                
+                # Use current date
+                today = datetime.utcnow().date()
+                learned_date = datetime.combine(today, datetime.min.time())
+                
+                # Create/update streak entry (count will be incremented automatically)
+                streak_data = StreakCreateInternal(
+                    user_id=user_id,
+                    learned_date=learned_date
+                )
+                
+                streak = await streak_crud.create_streak(streak_data)
+                logger.info(f"📈 Streak updated for user {user_id}: count={streak.count}, is_qualify={streak.is_qualify}")
+        except Exception as streak_error:
+            # Log error but don't fail the paragraph generation
+            logger.error(f"Error updating streak: {str(streak_error)}")
+        
         return schemas.ParagraphResponse(result=res_text, status=True)
         
     except HTTPException:
@@ -1444,6 +1557,174 @@ async def get_all_feedback(limit: int = 100, current_user: dict = Depends(get_cu
         raise HTTPException(status_code=500, detail={
             "error": "retrieval_failed",
             "message": "Failed to get feedback",
+            "details": str(e)
+        })
+
+# === Streak Management ===
+@router.post("/streak", response_model=schemas.StreakResponse)
+async def create_streak(req: schemas.StreakCreateRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Create or update a streak entry for the current user
+    """
+    try:
+        from app.database.crud import get_streak_crud
+        from app.database.models import StreakCreateInternal, StreakCreate
+        from datetime import datetime
+        
+        streak_crud = get_streak_crud()
+        
+        user_id = current_user.get("user_id") or current_user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
+        
+        # Parse learned_date or use current date
+        if req.learned_date:
+            try:
+                # Try parsing as full datetime first
+                if 'T' in req.learned_date or 'Z' in req.learned_date:
+                    learned_date = datetime.fromisoformat(req.learned_date.replace('Z', '+00:00'))
+                else:
+                    # Parse as date-only (YYYY-MM-DD)
+                    from datetime import date
+                    date_obj = datetime.strptime(req.learned_date, '%Y-%m-%d').date()
+                    learned_date = datetime.combine(date_obj, datetime.min.time())
+            except ValueError:
+                raise HTTPException(status_code=400, detail={
+                    "error": "invalid_date_format",
+                    "message": "learned_date must be in YYYY-MM-DD or ISO datetime format"
+                })
+        else:
+            # Use current date (without time)
+            today = datetime.utcnow().date()
+            learned_date = datetime.combine(today, datetime.min.time())
+        
+        # Create streak entry
+        streak_data = StreakCreateInternal(
+            user_id=user_id,
+            learned_date=learned_date
+        )
+        
+        streak = await streak_crud.create_streak(streak_data)
+        
+        logger.info(f"📈 Streak recorded for user {user_id} on {learned_date.strftime('%Y-%m-%d')}: count={streak.count}, is_qualify={streak.is_qualify}")
+        
+        return schemas.StreakResponse(
+            id=str(streak.id),
+            user_id=str(streak.user_id),
+            learned_date=streak.learned_date.strftime('%Y-%m-%d'),
+            count=streak.count,
+            is_qualify=streak.is_qualify,
+            created_at=streak.created_at.isoformat() if streak.created_at else "",
+            status=True
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error creating streak")
+        raise HTTPException(status_code=500, detail={
+            "error": "creation_failed",
+            "message": "Failed to create streak",
+            "details": str(e)
+        })
+
+@router.get("/streak-chain", response_model=schemas.StreakChainResponse)
+async def get_streak_chain(startday: str, endday: str, current_user: dict = Depends(get_current_user)):
+    """
+    Get streak chain for a date range
+    
+    Args:
+        startday: Start date in YYYY-MM-DD format
+        endday: End date in YYYY-MM-DD format
+    """
+    try:
+        from app.database.crud import get_streak_crud
+        from datetime import datetime, timedelta
+        
+        streak_crud = get_streak_crud()
+        
+        user_id = current_user.get("user_id") or current_user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
+        
+        # Parse dates
+        try:
+            start_date = datetime.strptime(startday, '%Y-%m-%d')
+            end_date = datetime.strptime(endday, '%Y-%m-%d')
+        except ValueError:
+            raise HTTPException(status_code=400, detail={
+                "error": "invalid_date_format",
+                "message": "Dates must be in YYYY-MM-DD format"
+            })
+        
+        # Validate date range
+        if start_date > end_date:
+            raise HTTPException(status_code=400, detail={
+                "error": "invalid_date_range",
+                "message": "start_date must be before or equal to end_date"
+            })
+        
+        # Get streak data for the date range
+        streaks = await streak_crud.get_streak_by_date_range(user_id, start_date, end_date)
+        
+        # Create a map of dates to streak data for fast lookup
+        streak_map = {
+            streak.learned_date.strftime('%Y-%m-%d'): streak 
+            for streak in streaks
+        }
+        
+        # Generate all dates in the range
+        dates_list = []
+        current_date = start_date
+        completed_days = 0
+        qualified_days = 0
+        
+        while current_date <= end_date:
+            date_str = current_date.strftime('%Y-%m-%d')
+            streak_data = streak_map.get(date_str)
+            is_completed = streak_data is not None
+            
+            dates_list.append(schemas.DateCompletionStatus(
+                date=date_str,
+                completed=is_completed,
+                count=streak_data.count if streak_data else None,
+                is_qualify=streak_data.is_qualify if streak_data else False
+            ))
+            
+            if is_completed:
+                completed_days += 1
+            
+            if streak_data and streak_data.is_qualify:
+                qualified_days += 1
+            
+            current_date += timedelta(days=1)
+        
+        total_days = len(dates_list)
+        
+        return schemas.StreakChainResponse(
+            id=hash(f"{user_id}_{startday}_{endday}") % (10 ** 8),  # Generate a pseudo-unique ID
+            start_date=startday,
+            end_date=endday,
+            dates=dates_list,
+            total_days=total_days,
+            completed_days=completed_days,
+            qualified_days=qualified_days,
+            status=True
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error getting streak chain")
+        raise HTTPException(status_code=500, detail={
+            "error": "retrieval_failed",
+            "message": "Failed to get streak chain",
             "details": str(e)
         })
 

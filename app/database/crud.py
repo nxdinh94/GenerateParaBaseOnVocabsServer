@@ -18,7 +18,8 @@ from app.database.models import (
     LearnedVocabsCreate, LearnedVocabsCreateInternal, LearnedVocabsInDB, LearnedVocabsResponse,
     VocabCollectionCreate, VocabCollectionInDB, VocabCollectionResponse,
     HistoryByDateCreate, HistoryByDateInDB, HistoryByDateResponse,
-    UserFeedbackCreate, UserFeedbackInDB, UserFeedbackResponse
+    UserFeedbackCreate, UserFeedbackInDB, UserFeedbackResponse,
+    StreakCreate, StreakCreateInternal, StreakInDB, StreakResponse
 )
 
 class UserCRUD:
@@ -125,6 +126,14 @@ class UserCRUD:
                 {"$set": update_dict}
             )
         
+        return await self.get_user_by_id(user_id)
+    
+    async def update_selected_collection(self, user_id: str, collection_id: str) -> Optional[UserInDB]:
+        """Update user's selected collection"""
+        await self.collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"selected_collection_id": collection_id}}
+        )
         return await self.get_user_by_id(user_id)
     
     async def delete_user(self, user_id: str) -> bool:
@@ -705,6 +714,123 @@ class UserFeedbackCRUD:
         result = await self.collection.delete_one({"_id": ObjectId(feedback_id)})
         return result.deleted_count > 0
 
+class StreakCRUD:
+    """CRUD operations for Streak collection"""
+    
+    @property
+    def collection(self) -> AsyncIOMotorCollection:
+        return get_collection("streak")
+    
+    async def create_streak(self, streak_data: StreakCreateInternal) -> StreakInDB:
+        """Create new streak entry or update if exists for the same user and date"""
+        # Convert to dict and prepare for storage
+        streak_dict = streak_data.dict()
+        streak_dict['user_id'] = ObjectId(streak_dict['user_id'])
+        
+        # Normalize learned_date to date-only (remove time component)
+        learned_date = streak_dict['learned_date']
+        if isinstance(learned_date, datetime):
+            date_only = learned_date.date()
+            streak_dict['learned_date'] = datetime.combine(date_only, datetime.min.time())
+        
+        # Check if streak already exists for this user and date
+        existing_streak = await self.collection.find_one({
+            "user_id": streak_dict['user_id'],
+            "learned_date": streak_dict['learned_date']
+        })
+        
+        if existing_streak:
+            # Update existing streak
+            update_fields = {}
+            
+            # Increment count if provided or if existing count exists
+            current_count = existing_streak.get('count', 0) or 0
+            if streak_dict.get('count') is not None:
+                # Use provided count
+                new_count = current_count + 1
+            else:
+                # Increment existing count
+                new_count = current_count + 1
+            
+            update_fields['count'] = new_count
+            
+            # Check if count reached 5, set is_qualify to true
+            if new_count >= 5:
+                update_fields['is_qualify'] = True
+            else:
+                update_fields['is_qualify'] = streak_dict.get('is_qualify', False)
+            
+            await self.collection.update_one(
+                {"_id": existing_streak["_id"]},
+                {"$set": update_fields}
+            )
+            updated_streak = await self.collection.find_one({"_id": existing_streak["_id"]})
+            return StreakInDB(**updated_streak)
+        else:
+            # Create new streak
+            streak_dict['created_at'] = datetime.utcnow()
+            # Initialize count to 1 if not provided
+            if streak_dict.get('count') is None:
+                streak_dict['count'] = 1
+            else:
+                streak_dict['count'] = (streak_dict.get('count') or 0) + 1
+            
+            # Check if count reached 5
+            if streak_dict['count'] >= 5:
+                streak_dict['is_qualify'] = True
+            
+            result = await self.collection.insert_one(streak_dict)
+            created_streak = await self.collection.find_one({"_id": result.inserted_id})
+            return StreakInDB(**created_streak)
+    
+    async def get_streak_by_id(self, streak_id: str) -> Optional[StreakInDB]:
+        """Get streak by ID"""
+        streak = await self.collection.find_one({"_id": ObjectId(streak_id)})
+        return StreakInDB(**streak) if streak else None
+    
+    async def get_user_streaks(self, user_id: str, limit: int = 100) -> List[StreakInDB]:
+        """Get all streak entries for a user"""
+        cursor = self.collection.find({"user_id": ObjectId(user_id)}).sort("learned_date", -1).limit(limit)
+        streaks = []
+        async for streak in cursor:
+            streaks.append(StreakInDB(**streak))
+        return streaks
+    
+    async def get_streak_by_date_range(self, user_id: str, start_date: datetime, end_date: datetime) -> List[StreakInDB]:
+        """Get streak entries for a user within a date range"""
+        # Normalize dates to date-only
+        start_date_only = datetime.combine(start_date.date(), datetime.min.time())
+        end_date_only = datetime.combine(end_date.date(), datetime.min.time())
+        
+        cursor = self.collection.find({
+            "user_id": ObjectId(user_id),
+            "learned_date": {
+                "$gte": start_date_only,
+                "$lte": end_date_only
+            }
+        }).sort("learned_date", 1)
+        
+        streaks = []
+        async for streak in cursor:
+            streaks.append(StreakInDB(**streak))
+        return streaks
+    
+    async def get_streak_by_user_and_date(self, user_id: str, learned_date: datetime) -> Optional[StreakInDB]:
+        """Get streak entry for a specific user and date"""
+        # Normalize date to date-only
+        date_only = datetime.combine(learned_date.date(), datetime.min.time())
+        
+        streak = await self.collection.find_one({
+            "user_id": ObjectId(user_id),
+            "learned_date": date_only
+        })
+        return StreakInDB(**streak) if streak else None
+    
+    async def delete_streak(self, streak_id: str) -> bool:
+        """Delete streak entry"""
+        result = await self.collection.delete_one({"_id": ObjectId(streak_id)})
+        return result.deleted_count > 0
+
 # Create CRUD instances (lazy initialization)
 def get_user_crud():
     return UserCRUD()
@@ -729,3 +855,6 @@ def get_history_by_date_crud():
 
 def get_user_feedback_crud():
     return UserFeedbackCRUD()
+
+def get_streak_crud():
+    return StreakCRUD()

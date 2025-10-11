@@ -37,3 +37,9 @@ Các URL quan trọng
 Swagger UI: 👉 http://127.0.0.1:8000/docs
 
 ReDoc UI: 👉 http://127.0.0.1:8000/redoc
+
+
+- api `generate-paragraph`: it will 
+  - save the **vocabs** to the learned_vocabs collection
+  - increase the count field in  the streak collection, if count == 5, 
+  make the is_qualified to be true

@@ -25,6 +25,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     avt: Optional[str] = None
+    selected_collection_id: Optional[str] = None
 
 class GoogleUserCreate(BaseModel):
     google_id: str = Field(..., min_length=1)
@@ -33,6 +34,7 @@ class GoogleUserCreate(BaseModel):
     picture: Optional[str] = None
     verified_email: Optional[bool] = None
     avt: Optional[str] = None
+    selected_collection_id: Optional[str] = None
 
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -49,6 +51,7 @@ class UserInDB(BaseModel):
     verified_email: Optional[bool] = None
     avt: Optional[str] = None  # Avatar field
     auth_type: str = Field(default="local")  # "local" or "google"
+    selected_collection_id: Optional[str] = None  # Selected vocabulary collection (default: "default")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     @field_validator('id', mode='before')
@@ -478,6 +481,89 @@ class UserFeedbackResponse(BaseModel):
     @field_validator('id', mode='before')
     @classmethod
     def validate_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+    
+    model_config = {
+        "populate_by_name": True,
+    }
+
+# Streak Models
+class StreakCreate(BaseModel):
+    learned_date: datetime  # Will be converted to date-only in CRUD
+    count: Optional[int] = Field(default=None, ge=0)
+    is_qualify: bool = Field(default=False)
+    
+    @field_validator('learned_date', mode='before')
+    @classmethod
+    def validate_learned_date(cls, v):
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            # Try parsing as date-only (YYYY-MM-DD)
+            try:
+                from datetime import date
+                date_obj = datetime.strptime(v, '%Y-%m-%d').date()
+                return datetime.combine(date_obj, datetime.min.time())
+            except ValueError:
+                # Try parsing as ISO datetime
+                try:
+                    return datetime.fromisoformat(v.replace('Z', '+00:00'))
+                except ValueError:
+                    raise ValueError("learned_date must be in YYYY-MM-DD or ISO datetime format")
+        raise ValueError("learned_date must be a datetime or valid date string")
+
+class StreakCreateInternal(BaseModel):
+    user_id: PyObjectId
+    learned_date: datetime
+    count: Optional[int] = Field(default=None, ge=0)
+    is_qualify: bool = Field(default=False)
+    
+    @field_validator('user_id', mode='before')
+    @classmethod
+    def validate_user_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid user_id ObjectId")
+
+class StreakInDB(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    user_id: PyObjectId
+    learned_date: datetime  # Stored as date-only (yyyy-mm-dd)
+    count: Optional[int] = Field(default=None, ge=0)
+    is_qualify: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str) and ObjectId.is_valid(v):
+            return v
+        raise ValueError("Invalid ObjectId")
+    
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+    }
+
+class StreakResponse(BaseModel):
+    id: PyObjectId = Field(alias="_id")
+    user_id: PyObjectId
+    learned_date: datetime  # Will be serialized as date-only string
+    count: Optional[int] = None
+    is_qualify: bool = False
+    created_at: datetime
+    
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def validate_object_ids(cls, v):
         if isinstance(v, ObjectId):
             return str(v)
         return v
