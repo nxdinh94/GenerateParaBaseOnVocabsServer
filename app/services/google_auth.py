@@ -133,6 +133,7 @@ class GoogleAuthService:
             "email": user_data.get("email"),
             "name": user_data.get("name"),
             "picture": user_data.get("picture"),
+            "selected_collection_id": user_data.get("selected_collection_id"),
             "exp": datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
         }
         
@@ -147,6 +148,7 @@ class GoogleAuthService:
             "email": user_data.get("email"),
             "name": user_data.get("name"),
             "picture": user_data.get("picture"),
+            "selected_collection_id": user_data.get("selected_collection_id"),
             "type": "refresh",
             "exp": datetime.utcnow() + timedelta(days=30)  # Refresh token expires in 30 days
         }

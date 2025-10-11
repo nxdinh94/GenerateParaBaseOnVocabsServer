@@ -109,29 +109,6 @@ async def google_login(req: schemas.GoogleLoginRequest):
             user_db = await user_crud.create_google_user(google_user_data)
             logger.info(f"✅ Created new Google user: {user_info.get('email')}")
         
-        # Create JWT token for our application (using database user ID)
-        jwt_user_data = {
-            "id": str(user_db.id),  # Use database user ID (_id) as primary identifier
-            "user_id": str(user_db.id),  # Keep for backward compatibility
-            "google_id": user_db.google_id,  # Store Google ID for reference
-            "email": user_db.email,
-            "name": user_db.name,
-            "picture": user_db.picture,
-            "verified_email": user_db.verified_email
-        }
-        jwt_token = google_auth_service.create_jwt_token(jwt_user_data)
-        
-        # Create JWT refresh token for renewing JWT tokens
-        jwt_refresh_token = google_auth_service.create_jwt_refresh_token(jwt_user_data)
-        
-        # Save JWT refresh token to database
-        refresh_token_data = RefreshTokenCreate(
-            user_id=str(user_db.id),
-            refresh_token=jwt_refresh_token
-        )
-        await refresh_token_crud.create_refresh_token(refresh_token_data)
-        logger.info(f"💾 Saved JWT refresh token for user: {user_db.email}")
-        
         # Check if user has a default vocabulary collection, create one if not
         from app.database.crud import get_vocab_collection_crud
         from app.database.models import VocabCollectionCreate, UserUpdate
@@ -169,6 +146,33 @@ async def google_login(req: schemas.GoogleLoginRequest):
                     {"$set": {"selected_collection_id": str(user_collections[0].id)}}
                 )
                 logger.info(f"📚 Set selected_collection_id to first collection for user: {user_db.email}")
+        
+        # Fetch updated user to get the selected_collection_id
+        user_db = await user_crud.get_user_by_id(str(user_db.id))
+        
+        # Create JWT token for our application (using database user ID)
+        jwt_user_data = {
+            "id": str(user_db.id),  # Use database user ID (_id) as primary identifier
+            "user_id": str(user_db.id),  # Keep for backward compatibility
+            "google_id": user_db.google_id,  # Store Google ID for reference
+            "email": user_db.email,
+            "name": user_db.name,
+            "picture": user_db.picture,
+            "verified_email": user_db.verified_email,
+            "selected_collection_id": user_db.selected_collection_id  # Include selected collection
+        }
+        jwt_token = google_auth_service.create_jwt_token(jwt_user_data)
+        
+        # Create JWT refresh token for renewing JWT tokens
+        jwt_refresh_token = google_auth_service.create_jwt_refresh_token(jwt_user_data)
+        
+        # Save JWT refresh token to database
+        refresh_token_data = RefreshTokenCreate(
+            user_id=str(user_db.id),
+            refresh_token=jwt_refresh_token
+        )
+        await refresh_token_crud.create_refresh_token(refresh_token_data)
+        logger.info(f"💾 Saved JWT refresh token for user: {user_db.email}")
         
         logger.info(f"✅ User {user_info.get('email')} logged in successfully")
         
@@ -356,7 +360,16 @@ async def renew_jwt_token(req: schemas.RenewJWTRequest):
                 "message": "JWT refresh token is invalid or expired"
             })
         
-        # Create new JWT token with same user data
+        # Fetch latest user data from database to get current selected_collection_id
+        user_crud = get_user_crud()
+        user_id = user_data.get("user_id") or user_data.get("id")
+        user_db = await user_crud.get_user_by_id(user_id)
+        
+        if user_db:
+            # Update user_data with latest selected_collection_id from database
+            user_data["selected_collection_id"] = user_db.selected_collection_id
+        
+        # Create new JWT token with updated user data
         new_jwt_token = google_auth_service.create_jwt_token(user_data)
         
         logger.info(f"✅ JWT token renewed for user: {user_data.get('email')}")
@@ -369,7 +382,8 @@ async def renew_jwt_token(req: schemas.RenewJWTRequest):
                 "user_id": user_data.get("user_id"),
                 "email": user_data.get("email"),
                 "name": user_data.get("name"),
-                "picture": user_data.get("picture")
+                "picture": user_data.get("picture"),
+                "selected_collection_id": user_data.get("selected_collection_id")
             }
         )
         
