@@ -247,6 +247,13 @@ class StreakChainResponse(BaseModel):
     qualified_days: int
     status: bool = True
 
+# === Today Streak Status ===
+class TodayStreakStatusResponse(BaseModel):
+    count: int = 0
+    is_qualify: bool = False
+    date: str  # YYYY-MM-DD format (current date)
+    status: bool = True
+
 # === Change Selected Collection ===
 class ChangeSelectedCollectionRequest(BaseModel):
     selected_collection_id: str

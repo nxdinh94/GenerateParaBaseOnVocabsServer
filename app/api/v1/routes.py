@@ -1742,6 +1742,61 @@ async def get_streak_chain(startday: str, endday: str, current_user: dict = Depe
             "details": str(e)
         })
 
+@router.get("/today-streak-status", response_model=schemas.TodayStreakStatusResponse)
+async def get_today_streak_status(current_user: dict = Depends(get_current_user)):
+    """
+    Get today's streak status (count, is_qualify, and current date)
+    Automatically returns data for the current day
+    If no data exists, returns count=0, is_qualify=false
+    """
+    try:
+        from app.database.crud import get_streak_crud
+        from datetime import datetime
+        
+        streak_crud = get_streak_crud()
+        
+        user_id = current_user.get("user_id") or current_user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
+        
+        # Get current date (UTC)
+        today = datetime.utcnow().date()
+        today_datetime = datetime.combine(today, datetime.min.time())
+        current_date_str = today.strftime('%Y-%m-%d')
+        
+        # Get streak data for today
+        streak_data = await streak_crud.get_streak_by_user_and_date(user_id, today_datetime)
+        
+        if streak_data:
+            # Return existing data
+            return schemas.TodayStreakStatusResponse(
+                count=streak_data.count or 0,
+                is_qualify=streak_data.is_qualify,
+                date=current_date_str,
+                status=True
+            )
+        else:
+            # No data for today, return default values
+            return schemas.TodayStreakStatusResponse(
+                count=0,
+                is_qualify=False,
+                date=current_date_str,
+                status=True
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error getting today's streak status")
+        raise HTTPException(status_code=500, detail={
+            "error": "retrieval_failed",
+            "message": "Failed to get today's streak status",
+            "details": str(e)
+        })
+
 # === Simple test endpoint ===
 @router.get("/test-data")
 async def get_test_data():
