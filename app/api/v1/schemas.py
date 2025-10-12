@@ -254,6 +254,20 @@ class TodayStreakStatusResponse(BaseModel):
     date: str  # YYYY-MM-DD format (current date)
     status: bool = True
 
+# === Increment Streak ===
+class IncrementStreakRequest(BaseModel):
+    learned_date: Optional[str] = None  # ISO format date string (YYYY-MM-DD) or datetime, defaults to today
+
+class IncrementStreakResponse(BaseModel):
+    id: str
+    user_id: str
+    learned_date: str  # YYYY-MM-DD format
+    count: int
+    is_qualify: bool
+    created_at: str
+    incremented: bool  # True if count was incremented, False if new entry created
+    status: bool = True
+
 # === Change Selected Collection ===
 class ChangeSelectedCollectionRequest(BaseModel):
     selected_collection_id: str

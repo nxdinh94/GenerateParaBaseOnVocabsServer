@@ -643,31 +643,6 @@ async def generate_paragraph(req: schemas.ParagraphRequest, current_user: dict =
         # res_text = await openai_client.generate_text(final_prompt)
         res_text = await gemini_client.generate_text(final_prompt)
         
-        # After successfully generating paragraph, create/update streak entry
-        try:
-            from app.database.crud import get_streak_crud
-            from app.database.models import StreakCreateInternal
-            
-            user_id = current_user.get("user_id") or current_user.get("id")
-            if user_id:
-                streak_crud = get_streak_crud()
-                
-                # Use current date
-                today = datetime.utcnow().date()
-                learned_date = datetime.combine(today, datetime.min.time())
-                
-                # Create/update streak entry (count will be incremented automatically)
-                streak_data = StreakCreateInternal(
-                    user_id=user_id,
-                    learned_date=learned_date
-                )
-                
-                streak = await streak_crud.create_streak(streak_data)
-                logger.info(f"📈 Streak updated for user {user_id}: count={streak.count}, is_qualify={streak.is_qualify}")
-        except Exception as streak_error:
-            # Log error but don't fail the paragraph generation
-            logger.error(f"Error updating streak: {str(streak_error)}")
-        
         return schemas.ParagraphResponse(result=res_text, status=True)
         
     except HTTPException:
