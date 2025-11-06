@@ -559,7 +559,22 @@ class VocabCollectionCRUD:
         return await self.get_vocab_collection_by_id(collection_id)
     
     async def delete_vocab_collection(self, collection_id: str) -> bool:
-        """Delete vocab collection"""
+        """
+        Delete vocab collection and cascade delete all associated learned vocabularies
+        
+        Returns:
+            bool: True if collection was deleted, False otherwise
+        """
+        # First, delete all learned_vocabs associated with this collection
+        learned_vocabs_collection = get_collection("learned_vocabs")
+        vocabs_delete_result = await learned_vocabs_collection.delete_many({
+            "collection_id": ObjectId(collection_id)
+        })
+        
+        # Log how many vocabularies were deleted
+        print(f"🗑️ Cascade deleted {vocabs_delete_result.deleted_count} learned vocabularies from collection {collection_id}")
+        
+        # Then delete the collection itself
         result = await self.collection.delete_one({"_id": ObjectId(collection_id)})
         return result.deleted_count > 0
 

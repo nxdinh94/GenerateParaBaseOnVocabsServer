@@ -1325,23 +1325,79 @@ async def update_vocab_collection(collection_id: str, req: schemas.VocabCollecti
 @router.delete("/vocab-collections/{collection_id}")
 async def delete_vocab_collection(collection_id: str, current_user: dict = Depends(get_current_user)):
     """
-    Delete vocabulary collection
+    Delete vocabulary collection with cascade deletion of associated learned vocabularies
+    Also updates user's selected_collection_id if it points to the deleted collection
     """
     try:
-        from app.database.crud import get_vocab_collection_crud
+        from app.database.crud import get_vocab_collection_crud, get_learned_vocabs_crud
+        from bson import ObjectId
         
         vocab_collection_crud = get_vocab_collection_crud()
-        success = await vocab_collection_crud.delete_vocab_collection(collection_id)
+        learned_vocabs_crud = get_learned_vocabs_crud()
+        user_crud = get_user_crud()
         
-        if not success:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail={
+                "error": "invalid_user_data",
+                "message": "User ID not found in token"
+            })
+        
+        # Verify the collection exists and belongs to the user
+        collection = await vocab_collection_crud.get_vocab_collection_by_id(collection_id)
+        if not collection:
             raise HTTPException(status_code=404, detail={
                 "error": "collection_not_found",
                 "message": "Vocabulary collection not found"
             })
         
+        if str(collection.user_id) != user_id:
+            raise HTTPException(status_code=403, detail={
+                "error": "access_denied",
+                "message": "You can only delete your own vocabulary collections"
+            })
+        
+        # Get count of vocabularies before deletion for response
+        vocabs_in_collection = await learned_vocabs_crud.get_vocabs_by_collection(collection_id, limit=10000)
+        vocab_count = len(vocabs_in_collection)
+        
+        # Perform cascade deletion (collection + all associated learned_vocabs)
+        success = await vocab_collection_crud.delete_vocab_collection(collection_id)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail={
+                "error": "deletion_failed",
+                "message": "Failed to delete vocabulary collection"
+            })
+        
+        # Check if user's selected_collection_id points to the deleted collection
+        user_db = await user_crud.get_user_by_id(user_id)
+        if user_db and user_db.selected_collection_id == collection_id:
+            # Get user's remaining collections
+            remaining_collections = await vocab_collection_crud.get_user_vocab_collections(user_id)
+            
+            if remaining_collections:
+                # Set selected_collection_id to the first remaining collection
+                new_selected_id = str(remaining_collections[0].id)
+                await user_crud.collection.update_one(
+                    {"_id": ObjectId(user_id)},
+                    {"$set": {"selected_collection_id": new_selected_id}}
+                )
+                logger.info(f"✅ Updated user's selected_collection_id to: {new_selected_id}")
+            else:
+                # No collections left, set to None
+                await user_crud.collection.update_one(
+                    {"_id": ObjectId(user_id)},
+                    {"$set": {"selected_collection_id": None}}
+                )
+                logger.info(f"✅ User has no more collections, set selected_collection_id to None")
+        
+        logger.info(f"✅ Deleted collection '{collection.name}' and {vocab_count} associated vocabularies")
+        
         return {
             "status": True,
-            "message": "Vocabulary collection deleted successfully"
+            "message": f"Vocabulary collection deleted successfully (including {vocab_count} vocabularies)",
+            "deleted_vocab_count": vocab_count
         }
         
     except HTTPException:
