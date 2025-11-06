@@ -5,6 +5,7 @@ pydantic
 python-dotenv
 google-genai   # Google Gen AI SDK (gemini). Cài theo docs của Google.
 openai         # OpenAI API client
+anthropic      # Anthropic Claude API client
 motor          # Async MongoDB driver
 pymongo        # MongoDB driver
 bcrypt         # For password hashing

@@ -3,6 +3,7 @@ from app.api.v1 import schemas
 from app.api.v1.database_routes import router as db_router
 from app.services.openai_client import OpenAIClient
 from app.services.gemini_client import GeminiClient
+from app.services.claude_client import ClaudeClient
 from app.services.google_auth import google_auth_service
 from app.database.crud import get_user_crud, get_refresh_token_crud
 from app.database.models import GoogleUserCreate, RefreshTokenCreate
@@ -19,6 +20,7 @@ router.include_router(db_router)
 
 gemini_client = GeminiClient()
 openai_client = OpenAIClient()
+claude_client = ClaudeClient()
 
 # === Google Authentication ===
 @router.post("/auth/google/login", response_model=schemas.GoogleLoginResponse)
@@ -1717,16 +1719,25 @@ async def get_streak_chain(startday: str, endday: str, current_user: dict = Depe
             "details": str(e)
         })
 
-@router.get("/today-streak-status", response_model=schemas.TodayStreakStatusResponse)
-async def get_today_streak_status(current_user: dict = Depends(get_current_user)):
+@router.get("/today-yesterday-streak-status", response_model=schemas.TodayStreakStatusResponse)
+async def get_today_yesterday_streak_status(date: str = "today", current_user: dict = Depends(get_current_user)):
     """
-    Get today's streak status (count, is_qualify, and current date)
-    Automatically returns data for the current day
-    If no data exists, returns count=0, is_qualify=false
+    Get streak status for today or yesterday (count, is_qualify, and date)
+    
+    Args:
+        date: Either "today" (default) or "yesterday"
+    
+    If no data exists, returns:
+    {
+        "count": 0,
+        "is_qualify": false,
+        "date": "2025-10-13",
+        "status": true
+    }
     """
     try:
         from app.database.crud import get_streak_crud
-        from datetime import datetime
+        from datetime import datetime, timedelta
         
         streak_crud = get_streak_crud()
         
@@ -1737,38 +1748,50 @@ async def get_today_streak_status(current_user: dict = Depends(get_current_user)
                 "message": "User ID not found in token"
             })
         
-        # Get current date (UTC)
-        today = datetime.utcnow().date()
-        today_datetime = datetime.combine(today, datetime.min.time())
-        current_date_str = today.strftime('%Y-%m-%d')
+        # Validate date parameter
+        if date not in ["today", "yesterday"]:
+            raise HTTPException(status_code=400, detail={
+                "error": "invalid_date_parameter",
+                "message": "Parameter 'date' must be either 'today' or 'yesterday'"
+            })
         
-        # Get streak data for today
-        streak_data = await streak_crud.get_streak_by_user_and_date(user_id, today_datetime)
+        # Get target date based on parameter
+        today = datetime.utcnow().date()
+        if date == "yesterday":
+            target_date = today - timedelta(days=1)
+        else:  # date == "today"
+            target_date = today
+        
+        target_datetime = datetime.combine(target_date, datetime.min.time())
+        target_date_str = target_date.strftime('%Y-%m-%d')
+        
+        # Get streak data for the target date
+        streak_data = await streak_crud.get_streak_by_user_and_date(user_id, target_datetime)
         
         if streak_data:
             # Return existing data
             return schemas.TodayStreakStatusResponse(
                 count=streak_data.count or 0,
                 is_qualify=streak_data.is_qualify,
-                date=current_date_str,
+                date=target_date_str,
                 status=True
             )
         else:
-            # No data for today, return default values
+            # No data for target date, return default values
             return schemas.TodayStreakStatusResponse(
                 count=0,
                 is_qualify=False,
-                date=current_date_str,
+                date=target_date_str,
                 status=True
             )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Error getting today's streak status")
+        logger.exception(f"Error getting streak status for {date}")
         raise HTTPException(status_code=500, detail={
             "error": "retrieval_failed",
-            "message": "Failed to get today's streak status",
+            "message": f"Failed to get streak status for {date}",
             "details": str(e)
         })
 
